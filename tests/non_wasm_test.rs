@@ -1,8 +1,7 @@
 #![cfg(not(target_family = "wasm"))]
 
-use std::sync::{Arc, Condvar, Mutex};
+use std::sync::{Arc, Condvar, LazyLock as Lazy, Mutex};
 
-use once_cell::sync::Lazy;
 use wasm_bindgen_test::wasm_bindgen_test;
 
 static TEST: Lazy<Arc<(Mutex<bool>, Condvar)>> =

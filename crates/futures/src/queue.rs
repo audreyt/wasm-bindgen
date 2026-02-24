@@ -113,7 +113,7 @@ impl Queue {
     }
 
     pub(crate) fn with<R>(f: impl FnOnce(&Self) -> R) -> R {
-        use once_cell::unsync::Lazy;
+        use core::cell::LazyCell as Lazy;
 
         struct Wrapper<T>(Lazy<T>);
 

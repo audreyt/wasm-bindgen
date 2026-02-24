@@ -21,7 +21,6 @@ cfg-if = "1.0.0"
 futures-core = { version = '0.3.8', default-features = false, optional = true }
 futures-util = { version = '0.3.31', default-features = false, features = ["std"], optional = true }
 js-sys = { path = "../js-sys", version = '=0.3.90', default-features = false }
-once_cell = { version = "1.12", default-features = false }
 wasm-bindgen = { path = "../..", version = '=0.2.113', default-features = false }
 
 [features]

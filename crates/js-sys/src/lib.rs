@@ -13059,7 +13059,7 @@ impl<T: JsGeneric> Promising for Promise<T> {
 /// This allows access to the global properties and global names by accessing
 /// the `Object` returned.
 pub fn global() -> Object {
-    use once_cell::unsync::Lazy;
+    use core::cell::LazyCell as Lazy;
 
     struct Wrapper<T>(Lazy<T>);
 
