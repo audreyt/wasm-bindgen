@@ -20,6 +20,11 @@
   `__wbindgen_object_is_undefined` intrinsic in favor of a safe Rust-side equivalent.
   [#4993](https://github.com/wasm-bindgen/wasm-bindgen/pull/4993)
 
+* Renamed `__wbindgen_object_is_null_or_undefined` intrinsic to
+  `__wbindgen_is_null_or_undefined` and removed the `__wbindgen_object_is_undefined`
+  intrinsic, replacing it with a safe Rust-side check. The `is_null_or_undefined` check
+  now uses safe `&JsValue` ABI instead of raw `u32`.
+  [#4994](https://github.com/wasm-bindgen/wasm-bindgen/pull/4994)
 ### Fixed
 
 * Fixed incorrect method naming for stable web-sys methods that reference unstable
