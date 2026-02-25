@@ -869,7 +869,13 @@ fn instruction(
                     let name = format!("deferred{tmp}_{i}");
                     writeln!(js.pre_try, "let {name};").unwrap();
                     writeln!(js.prelude, "{name} = {arg};").unwrap();
-                    args.push(name);
+                    // For memory64, DeferFree's ptr/len args need BigInt conversion
+                    // when passed to wasm functions that expect i64 parameters.
+                    if js.cx.memory64 && matches!(instr, Instruction::DeferFree { .. }) {
+                        args.push(format!("BigInt({name})"));
+                    } else {
+                        args.push(name);
+                    }
                 }
                 if let Instruction::DeferFree { align, .. } = instr {
                     // add alignment
@@ -1039,10 +1045,22 @@ fn instruction(
 
         Instruction::Retptr { size } => {
             js.cx.inject_stack_pointer_shim()?;
-            js.prelude(&format!(
-                "const retptr = wasm.__wbindgen_add_to_stack_pointer(-{size});"
-            ));
-            js.finally(&format!("wasm.__wbindgen_add_to_stack_pointer({size});"));
+            let memory64 = js.cx.memory64;
+            if memory64 {
+                js.prelude(&format!(
+                    "const retptr = Number(wasm.__wbindgen_add_to_stack_pointer(-{size}n));"
+                ));
+                js.finally(&format!(
+                    "wasm.__wbindgen_add_to_stack_pointer({size}n);"
+                ));
+            } else {
+                js.prelude(&format!(
+                    "const retptr = wasm.__wbindgen_add_to_stack_pointer(-{size});"
+                ));
+                js.finally(&format!(
+                    "wasm.__wbindgen_add_to_stack_pointer({size});"
+                ));
+            }
             js.stack.push("retptr".to_string());
         }
 
@@ -1082,6 +1100,13 @@ fn instruction(
             // it earlier, and we always push the same value, so load that value
             // here
             let expr = format!("{mem}().{method}(retptr + {size} * {scaled_offset}, true)");
+            // In memory64 mode, pointer values loaded as BigInt64 need Number()
+            // wrapping so they can be used for JS array indexing and arithmetic.
+            let expr = if js.cx.memory64 && matches!(ty, AdapterType::I64) {
+                format!("Number({expr})")
+            } else {
+                expr
+            };
             js.prelude(&format!("var r{offset} = {expr};"));
             js.push(format!("r{offset}"));
         }

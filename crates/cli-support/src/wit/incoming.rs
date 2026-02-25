@@ -131,6 +131,7 @@ impl InstructionBuilder<'_, '_> {
             Descriptor::Option(d) => self.incoming_option(d)?,
 
             Descriptor::String | Descriptor::CachedString => {
+                let ptr_ty = self.ptr_ty();
                 self.instruction(
                     &[AdapterType::String],
                     Instruction::StringToMemory {
@@ -138,7 +139,7 @@ impl InstructionBuilder<'_, '_> {
                         realloc: self.cx.realloc(),
                         mem: self.cx.memory()?,
                     },
-                    &[AdapterType::I32, AdapterType::I32],
+                    &[ptr_ty.clone(), ptr_ty],
                 );
             }
 
@@ -146,6 +147,7 @@ impl InstructionBuilder<'_, '_> {
                 let kind = arg.vector_kind().ok_or_else(|| {
                     format_err!("unsupported argument type for calling Rust function from JS {arg:?}")
                 })?;
+                let ptr_ty = self.ptr_ty();
                 self.instruction(
                     &[AdapterType::Vector(kind.clone())],
                     Instruction::VectorToMemory {
@@ -153,7 +155,7 @@ impl InstructionBuilder<'_, '_> {
                         malloc: self.cx.malloc()?,
                         mem: self.cx.memory()?,
                     },
-                    &[AdapterType::I32, AdapterType::I32],
+                    &[ptr_ty.clone(), ptr_ty],
                 );
             }
 
@@ -209,6 +211,7 @@ impl InstructionBuilder<'_, '_> {
             }
             Descriptor::String | Descriptor::CachedString => {
                 // This allocation is cleaned up once it's received in Rust.
+                let ptr_ty = self.ptr_ty();
                 self.instruction(
                     &[AdapterType::String],
                     Instruction::StringToMemory {
@@ -216,7 +219,7 @@ impl InstructionBuilder<'_, '_> {
                         realloc: self.cx.realloc(),
                         mem: self.cx.memory()?,
                     },
-                    &[AdapterType::I32, AdapterType::I32],
+                    &[ptr_ty.clone(), ptr_ty],
                 );
             }
             Descriptor::Slice(_) => {
@@ -227,6 +230,7 @@ impl InstructionBuilder<'_, '_> {
                         "unsupported argument type for calling Rust function from JS {arg:?}"
                     )
                 })?;
+                let ptr_ty = self.ptr_ty();
                 if mutable {
                     self.instruction(
                         &[AdapterType::Vector(kind.clone())],
@@ -235,7 +239,7 @@ impl InstructionBuilder<'_, '_> {
                             malloc: self.cx.malloc()?,
                             mem: self.cx.memory()?,
                         },
-                        &[AdapterType::I32, AdapterType::I32, AdapterType::Externref],
+                        &[ptr_ty.clone(), ptr_ty, AdapterType::Externref],
                     );
                     self.late_instruction(
                         &[AdapterType::Externref],
@@ -250,7 +254,7 @@ impl InstructionBuilder<'_, '_> {
                             malloc: self.cx.malloc()?,
                             mem: self.cx.memory()?,
                         },
-                        &[AdapterType::I32, AdapterType::I32],
+                        &[ptr_ty.clone(), ptr_ty],
                     );
                 }
             }
@@ -354,6 +358,7 @@ impl InstructionBuilder<'_, '_> {
                 let malloc = self.cx.malloc()?;
                 let mem = self.cx.memory()?;
                 let realloc = self.cx.realloc();
+                let ptr_ty = self.ptr_ty();
                 self.instruction(
                     &[AdapterType::String.option()],
                     Instruction::OptionString {
@@ -361,7 +366,7 @@ impl InstructionBuilder<'_, '_> {
                         mem,
                         realloc,
                     },
-                    &[AdapterType::I32, AdapterType::I32],
+                    &[ptr_ty.clone(), ptr_ty],
                 );
             }
 
@@ -373,10 +378,11 @@ impl InstructionBuilder<'_, '_> {
                 })?;
                 let malloc = self.cx.malloc()?;
                 let mem = self.cx.memory()?;
+                let ptr_ty = self.ptr_ty();
                 self.instruction(
                     &[AdapterType::Vector(kind.clone()).option()],
                     Instruction::OptionVector { kind, malloc, mem },
-                    &[AdapterType::I32, AdapterType::I32],
+                    &[ptr_ty.clone(), ptr_ty],
                 );
             }
 

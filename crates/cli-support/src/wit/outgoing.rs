@@ -116,8 +116,9 @@ impl InstructionBuilder<'_, '_> {
 
             Descriptor::String => {
                 // fetch the ptr/length ...
-                self.get(AdapterType::I32);
-                self.get(AdapterType::I32);
+                let ptr_ty = self.ptr_ty();
+                self.get(ptr_ty.clone());
+                self.get(ptr_ty);
 
                 // ... then defer a call to `free` to happen later
                 let free = self.cx.free()?;
@@ -148,8 +149,9 @@ impl InstructionBuilder<'_, '_> {
                 })?;
                 let mem = self.cx.memory()?;
                 let free = self.cx.free()?;
+                let ptr_ty = self.ptr_ty();
                 self.instruction(
-                    &[AdapterType::I32, AdapterType::I32],
+                    &[ptr_ty.clone(), ptr_ty],
                     Instruction::VectorLoad {
                         kind: kind.clone(),
                         mem,
@@ -205,8 +207,9 @@ impl InstructionBuilder<'_, '_> {
             Descriptor::CachedString => self.cached_string(false)?,
 
             Descriptor::String => {
+                let ptr_ty = self.ptr_ty();
                 self.instruction(
-                    &[AdapterType::I32, AdapterType::I32],
+                    &[ptr_ty.clone(), ptr_ty],
                     Instruction::MemoryToString(self.cx.memory()?),
                     &[AdapterType::String],
                 );
@@ -218,8 +221,9 @@ impl InstructionBuilder<'_, '_> {
                     )
                 })?;
                 let mem = self.cx.memory()?;
+                let ptr_ty = self.ptr_ty();
                 self.instruction(
-                    &[AdapterType::I32, AdapterType::I32],
+                    &[ptr_ty.clone(), ptr_ty],
                     Instruction::View {
                         kind: kind.clone(),
                         mem,
@@ -397,8 +401,9 @@ impl InstructionBuilder<'_, '_> {
                 })?;
                 let mem = self.cx.memory()?;
                 let free = self.cx.free()?;
+                let ptr_ty = self.ptr_ty();
                 self.instruction(
-                    &[AdapterType::I32, AdapterType::I32],
+                    &[ptr_ty.clone(), ptr_ty],
                     Instruction::OptionVectorLoad {
                         kind: kind.clone(),
                         mem,
@@ -501,8 +506,9 @@ impl InstructionBuilder<'_, '_> {
             }
             Descriptor::String => {
                 // fetch the ptr/length ...
-                self.get(AdapterType::I32);
-                self.get(AdapterType::I32);
+                let ptr_ty = self.ptr_ty();
+                self.get(ptr_ty.clone());
+                self.get(ptr_ty);
                 // fetch the err/is_err
                 self.get(AdapterType::I32);
                 self.get(AdapterType::I32);
@@ -582,8 +588,9 @@ impl InstructionBuilder<'_, '_> {
                     )
                 })?;
                 let mem = self.cx.memory()?;
+                let ptr_ty = self.ptr_ty();
                 self.instruction(
-                    &[AdapterType::I32, AdapterType::I32],
+                    &[ptr_ty.clone(), ptr_ty],
                     Instruction::OptionView {
                         kind: kind.clone(),
                         mem,
@@ -624,8 +631,9 @@ impl InstructionBuilder<'_, '_> {
     fn cached_string(&mut self, owned: bool) -> Result<(), Error> {
         let mem = self.cx.memory()?;
         let free = self.cx.free()?;
+        let ptr_ty = self.ptr_ty();
         self.instruction(
-            &[AdapterType::I32, AdapterType::I32],
+            &[ptr_ty.clone(), ptr_ty],
             Instruction::CachedStringLoad {
                 owned,
                 mem,

@@ -108,6 +108,9 @@ pub struct Context<'a> {
 
     /// Mapping from qualified name (used in WasmDescribe) to js_name (used for TypeScript output).
     pub(crate) qualified_to_js_name: HashMap<String, String>,
+
+    /// If the module uses memory64 (wasm64 target).
+    memory64: bool,
 }
 
 /// Definition of a module export
@@ -202,6 +205,12 @@ impl<'a> Context<'a> {
         wit: &'a NonstandardWitSection,
         aux: &'a WasmBindgenAux,
     ) -> Result<Context<'a>, Error> {
+        let memory64 = module
+            .memories
+            .iter()
+            .next()
+            .map(|m| m.memory64)
+            .unwrap_or(false);
         Ok(Context {
             globals: String::new(),
             intrinsics: Some(Default::default()),
@@ -228,11 +237,52 @@ impl<'a> Context<'a> {
             stack_pointer_shim_injected: false,
             qualified_to_rust_name: Default::default(),
             qualified_to_js_name: Default::default(),
+            memory64,
         })
     }
 
     fn has_intrinsic(&self, name: &str) -> bool {
         self.intrinsics.as_ref().unwrap().contains_key(name)
+    }
+
+    /// Wraps an expression with `Number()` for memory64 (BigInt→Number conversion).
+    #[allow(dead_code)]
+    fn to_number(&self, expr: &str) -> String {
+        if self.memory64 {
+            format!("Number({expr})")
+        } else {
+            expr.to_string()
+        }
+    }
+
+    /// Wraps an expression with `BigInt()` for memory64.
+    #[allow(dead_code)]
+    fn to_wasm_bigint(&self, expr: &str) -> String {
+        if self.memory64 {
+            format!("BigInt({expr})")
+        } else {
+            expr.to_string()
+        }
+    }
+
+    /// Returns `""` for memory64 (values are already BigInt), `" >>> 0"` for wasm32.
+    #[allow(dead_code)]
+    fn ptr_coerce(&self) -> &str {
+        if self.memory64 {
+            ""
+        } else {
+            " >>> 0"
+        }
+    }
+
+    /// Returns `"n"` suffix for BigInt literals in memory64, `""` for wasm32.
+    #[allow(dead_code)]
+    fn wasm_bigint_suffix(&self) -> &str {
+        if self.memory64 {
+            "n"
+        } else {
+            ""
+        }
     }
 
     /// Writes an ExportDefinition to global and typescript buffers.
@@ -1818,11 +1868,26 @@ if (require('worker_threads').isMainThread) {{
             num: mem.num,
         };
         self.expose_text_encoder(memory);
+        let memory64 = self.memory64;
+        let debug_mode = self.config.debug;
         intrinsic(&mut self.intrinsics, ret.to_string().into(), || {
-            let debug = if self.config.debug {
+            let debug = if debug_mode {
                 "if (typeof(arg) !== 'string') throw new Error(`expected a string argument, found ${typeof(arg)}`);\n"
             } else {
                 ""
+            };
+
+            // For memory64, malloc/realloc args need BigInt wrapping and
+            // return values need Number() conversion for use as array indices.
+            let malloc_buf = if memory64 {
+                "Number(malloc(BigInt(buf.length), 1n))".to_string()
+            } else {
+                "malloc(buf.length, 1) >>> 0".to_string()
+            };
+            let malloc_len = if memory64 {
+                "Number(malloc(BigInt(len), 1n))".to_string()
+            } else {
+                "malloc(len, 1) >>> 0".to_string()
             };
 
             // A fast path that directly writes char codes into Wasm memory as long
@@ -1838,14 +1903,14 @@ if (require('worker_threads').isMainThread) {{
                 "\
                     if (realloc === undefined) {{
                         const buf = cachedTextEncoder.encode(arg);
-                        const ptr = malloc(buf.length, 1) >>> 0;
+                        const ptr = {malloc_buf};
                         {mem}().subarray(ptr, ptr + buf.length).set(buf);
                         WASM_VECTOR_LEN = buf.length;
                         return ptr;
                     }}
 
                     let len = arg.length;
-                    let ptr = malloc(len, 1) >>> 0;
+                    let ptr = {malloc_len};
 
                     const mem = {mem}();
 
@@ -1859,6 +1924,17 @@ if (require('worker_threads').isMainThread) {{
                 ",
             );
 
+            let realloc1 = if memory64 {
+                "Number(realloc(BigInt(ptr), BigInt(len), BigInt(len = offset + arg.length * 3), 1n))".to_string()
+            } else {
+                "realloc(ptr, len, len = offset + arg.length * 3, 1) >>> 0".to_string()
+            };
+            let realloc2 = if memory64 {
+                "Number(realloc(BigInt(ptr), BigInt(len), BigInt(offset), 1n))".to_string()
+            } else {
+                "realloc(ptr, len, offset, 1) >>> 0".to_string()
+            };
+
             format!(
                 "
                 function {ret}(arg, malloc, realloc) {{
@@ -1866,19 +1942,19 @@ if (require('worker_threads').isMainThread) {{
                         if (offset !== 0) {{
                             arg = arg.slice(offset);
                         }}
-                        ptr = realloc(ptr, len, len = offset + arg.length * 3, 1) >>> 0;
+                        ptr = {realloc1};
                         const view = {mem}().subarray(ptr + offset, ptr + len);
                         const ret = cachedTextEncoder.encodeInto(arg, view);
                         {debug_end}
                         offset += ret.written;
-                        ptr = realloc(ptr, len, offset, 1) >>> 0;
+                        ptr = {realloc2};
                     }}
 
                     WASM_VECTOR_LEN = offset;
                     return ptr;
                 }}
                 ",
-                debug_end = if self.config.debug {
+                debug_end = if debug_mode {
                     "if (ret.read !== arg.length) throw new Error('failed to pass whole string');"
                 } else {
                     ""
@@ -1926,16 +2002,22 @@ if (require('worker_threads').isMainThread) {{
             num: mem.num,
         };
         self.expose_wasm_vector_len();
+        let memory64 = self.memory64;
         match (self.aux.externref_table, self.aux.externref_alloc) {
             (Some(table), Some(alloc)) => {
                 // TODO: using `addToExternrefTable` goes back and forth between wasm
                 // and JS a lot, we should have a bulk operation for this.
                 let add = self.expose_add_to_externref_table(table, alloc);
                 intrinsic(&mut self.intrinsics, ret.to_string().into(), || {
+                    let malloc_expr = if memory64 {
+                        "Number(malloc(BigInt(array.length * 4), 4n))".to_string()
+                    } else {
+                        "malloc(array.length * 4, 4) >>> 0".to_string()
+                    };
                     format!(
                         "
                         function {ret}(array, malloc) {{
-                            const ptr = malloc(array.length * 4, 4) >>> 0;
+                            const ptr = {malloc_expr};
                             for (let i = 0; i < array.length; i++) {{
                                 const add = {add}(array[i]);
                                 {mem}().setUint32(ptr + 4 * i, add, true);
@@ -1951,10 +2033,15 @@ if (require('worker_threads').isMainThread) {{
             _ => {
                 self.expose_add_heap_object();
                 intrinsic(&mut self.intrinsics, ret.to_string().into(), || {
+                    let malloc_expr = if memory64 {
+                        "Number(malloc(BigInt(array.length * 4), 4n))".to_string()
+                    } else {
+                        "malloc(array.length * 4, 4) >>> 0".to_string()
+                    };
                     format!(
                         "
                         function {ret}(array, malloc) {{
-                            const ptr = malloc(array.length * 4, 4) >>> 0;
+                            const ptr = {malloc_expr};
                             const mem = {mem}();
                             for (let i = 0; i < array.length; i++) {{
                                 mem.setUint32(ptr + 4 * i, addHeapObject(array[i]), true);
@@ -1977,11 +2064,17 @@ if (require('worker_threads').isMainThread) {{
             num: view.num,
         };
         self.expose_wasm_vector_len();
+        let memory64 = self.memory64;
         intrinsic(&mut self.intrinsics, ret.to_string().into(), || {
+            let malloc_expr = if memory64 {
+                format!("Number(malloc(BigInt(arg.length * {size}), {size}n))")
+            } else {
+                format!("malloc(arg.length * {size}, {size}) >>> 0")
+            };
             format!(
                 "
                 function {ret}(arg, malloc) {{
-                    const ptr = malloc(arg.length * {size}, {size}) >>> 0;
+                    const ptr = {malloc_expr};
                     {view}().set(arg, ptr / {size});
                     WASM_VECTOR_LEN = arg.length;
                     return ptr;
@@ -2159,11 +2252,16 @@ if (require('worker_threads').isMainThread) {{
             name: "getStringFromWasm".into(),
             num: mem.num,
         };
+        let ptr_fixup = if self.memory64 {
+            "ptr = Number(ptr);"
+        } else {
+            "ptr = ptr >>> 0;"
+        };
         intrinsic(&mut self.intrinsics, ret.to_string().into(), || {
             format!(
                 "
                 function {ret}(ptr, len) {{
-                    ptr = ptr >>> 0;
+                    {ptr_fixup}
                     return decodeText(ptr, len);
                 }}
                 ",
@@ -2220,6 +2318,15 @@ if (require('worker_threads').isMainThread) {{
             name: "getArrayJsValueFromWasm".into(),
             num: mem.num,
         };
+        // For wasm64, externref table indices are stored as 64-bit pointers
+        // so we read with getBigInt64 and stride is 8. For wasm32 it's getUint32 / stride 4.
+        let (stride, get_method, ptr_fixup) = if self.memory64 {
+            (8, "getBigInt64", "ptr = Number(ptr);")
+        } else {
+            (4, "getUint32", "ptr = ptr >>> 0;")
+        };
+        let idx_wrap = if self.memory64 { "Number(" } else { "" };
+        let idx_wrap_end = if self.memory64 { ")" } else { "" };
         match (self.aux.externref_table, self.aux.externref_drop_slice) {
             (Some(table), Some(drop)) => {
                 let table = self.export_name_of(table);
@@ -2228,11 +2335,11 @@ if (require('worker_threads').isMainThread) {{
                     format!(
                         "
                         function {ret}(ptr, len) {{
-                            ptr = ptr >>> 0;
+                            {ptr_fixup}
                             const mem = {mem}();
                             const result = [];
-                            for (let i = ptr; i < ptr + 4 * len; i += 4) {{
-                                result.push(wasm.{table}.get(mem.getUint32(i, true)));
+                            for (let i = ptr; i < ptr + {stride} * len; i += {stride}) {{
+                                result.push(wasm.{table}.get({idx_wrap}mem.{get_method}(i, true){idx_wrap_end}));
                             }}
                             wasm.{drop}(ptr, len);
                             return result;
@@ -2248,11 +2355,11 @@ if (require('worker_threads').isMainThread) {{
                     format!(
                         "
                         function {ret}(ptr, len) {{
-                            ptr = ptr >>> 0;
+                            {ptr_fixup}
                             const mem = {mem}();
                             const result = [];
-                            for (let i = ptr; i < ptr + 4 * len; i += 4) {{
-                                result.push(takeObject(mem.getUint32(i, true)));
+                            for (let i = ptr; i < ptr + {stride} * len; i += {stride}) {{
+                                result.push(takeObject({idx_wrap}mem.{get_method}(i, true){idx_wrap_end}));
                             }}
                             return result;
                         }}
@@ -2273,6 +2380,13 @@ if (require('worker_threads').isMainThread) {{
             name: "getArrayJsValueViewFromWasm".into(),
             num: mem.num,
         };
+        let (stride, get_method, ptr_fixup) = if self.memory64 {
+            (8, "getBigInt64", "ptr = Number(ptr);")
+        } else {
+            (4, "getUint32", "ptr = ptr >>> 0;")
+        };
+        let idx_wrap = if self.memory64 { "Number(" } else { "" };
+        let idx_wrap_end = if self.memory64 { ")" } else { "" };
         match self.aux.externref_table {
             Some(table) => {
                 let table = self.export_name_of(table);
@@ -2280,11 +2394,11 @@ if (require('worker_threads').isMainThread) {{
                     format!(
                         "
                         function {ret}(ptr, len) {{
-                            ptr = ptr >>> 0;
+                            {ptr_fixup}
                             const mem = {mem}();
                             const result = [];
-                            for (let i = ptr; i < ptr + 4 * len; i += 4) {{
-                                result.push(wasm.{table}.get(mem.getUint32(i, true)));
+                            for (let i = ptr; i < ptr + {stride} * len; i += {stride}) {{
+                                result.push(wasm.{table}.get({idx_wrap}mem.{get_method}(i, true){idx_wrap_end}));
                             }}
                             return result;
                         }}
@@ -2299,11 +2413,11 @@ if (require('worker_threads').isMainThread) {{
                     format!(
                         "
                         function {ret}(ptr, len) {{
-                            ptr = ptr >>> 0;
+                            {ptr_fixup}
                             const mem = {mem}();
                             const result = [];
-                            for (let i = ptr; i < ptr + 4 * len; i += 4) {{
-                                result.push(getObject(mem.getUint32(i, true)));
+                            for (let i = ptr; i < ptr + {stride} * len; i += {stride}) {{
+                                result.push(getObject({idx_wrap}mem.{get_method}(i, true){idx_wrap_end}));
                             }}
                             return result;
                         }}
