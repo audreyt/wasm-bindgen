@@ -122,6 +122,13 @@ pub struct JsFuture<T = JsValue> {
 
 impl core::panic::UnwindSafe for JsFuture {}
 
+// SAFETY: When `atomics` is not enabled, wasm is single-threaded and `Send` is
+// meaningless (but required by many APIs). This mirrors the `JsValue` impl.
+#[cfg(not(target_feature = "atomics"))]
+unsafe impl<T> Send for JsFuture<T> {}
+#[cfg(not(target_feature = "atomics"))]
+unsafe impl<T> Sync for JsFuture<T> {}
+
 unsafe impl<T> ErasableGeneric for JsFuture<T> {
     type Repr = JsFuture<JsValue>;
 }

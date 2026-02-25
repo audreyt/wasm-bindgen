@@ -184,6 +184,13 @@ pub type Closure<T> = ScopedClosure<'static, T>;
 // referenced through a raw pointer (borrowed), neither of which is stored inline.
 impl<T: ?Sized> Unpin for ScopedClosure<'_, T> {}
 
+// SAFETY: When `atomics` is not enabled, wasm is single-threaded and `Send` is
+// meaningless (but required by many APIs). This mirrors the `JsValue` impl.
+#[cfg(not(target_feature = "atomics"))]
+unsafe impl<T: ?Sized> Send for ScopedClosure<'_, T> {}
+#[cfg(not(target_feature = "atomics"))]
+unsafe impl<T: ?Sized> Sync for ScopedClosure<'_, T> {}
+
 fn _assert_compiles<T>(pin: core::pin::Pin<&mut ScopedClosure<'static, T>>) {
     let _ = &mut *pin.get_mut();
 }

@@ -160,6 +160,8 @@ pub struct JsValue {
     _marker: PhantomData<*mut u8>, // not at all threadsafe
 }
 
+// SAFETY: When `atomics` is not enabled, wasm is single-threaded and `Send` is
+// meaningless (but required by many APIs).
 #[cfg(not(target_feature = "atomics"))]
 unsafe impl Send for JsValue {}
 #[cfg(not(target_feature = "atomics"))]
