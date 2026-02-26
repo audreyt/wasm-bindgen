@@ -62,7 +62,8 @@ pub fn wasm64_return_vec(len: usize) -> Vec<u8> {
 
 #[wasm_bindgen]
 pub fn wasm64_closure_returning_usize() -> usize {
-    let closure = Closure::wrap(Box::new(|| -> usize { 0x1_0000_0001usize }) as Box<dyn Fn() -> usize>);
+    let closure =
+        Closure::wrap(Box::new(|| -> usize { 0x1_0000_0001usize }) as Box<dyn Fn() -> usize>);
     let _js_val = closure.as_ref().clone();
     // We can't easily call the closure from Rust side, but we verify it compiles
     // and the closure type is correct for wasm64. The JS side will test the actual call.
@@ -72,7 +73,11 @@ pub fn wasm64_closure_returning_usize() -> usize {
 
 #[wasm_bindgen_test]
 fn test_pointer_size() {
-    assert_eq!(std::mem::size_of::<usize>(), 8, "usize should be 8 bytes on wasm64");
+    assert_eq!(
+        std::mem::size_of::<usize>(),
+        8,
+        "usize should be 8 bytes on wasm64"
+    );
     assert_eq!(
         std::mem::size_of::<*const u8>(),
         8,
