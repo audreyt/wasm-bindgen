@@ -568,15 +568,20 @@ impl TryToTokens for ast::Export {
         let mut converted_arguments = vec![];
         let ret = Ident::new("_ret", Span::call_site());
 
+        let name = &self.rust_name;
+        let wasm_bindgen = &self.wasm_bindgen;
+
         let offset = if self.method_self.is_some() {
-            args.push(quote! { me: usize });
+            if matches!(self.method_self, Some(ast::MethodSelf::ByValue)) {
+                let class = self.rust_class.as_ref().unwrap();
+                args.push(quote! { me: <#class as #wasm_bindgen::convert::FromWasmAbi>::Abi });
+            } else {
+                args.push(quote! { me: usize });
+            }
             1
         } else {
             0
         };
-
-        let name = &self.rust_name;
-        let wasm_bindgen = &self.wasm_bindgen;
         let wasm_bindgen_futures = &self.wasm_bindgen_futures;
         let receiver = match self.method_self {
             Some(ast::MethodSelf::ByValue) => {
