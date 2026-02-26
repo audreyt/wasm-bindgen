@@ -59,7 +59,7 @@ macro_rules! closures {
             fn into_abi(self) -> WasmSlice {
                 unsafe {
                     let (a, b): (usize, usize) = mem::transmute(self);
-                    WasmSlice { ptr: a as u32, len: b as u32 }
+                    WasmSlice { ptr: a, len: b }
                 }
             }
         }
