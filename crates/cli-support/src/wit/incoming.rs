@@ -71,12 +71,13 @@ impl InstructionBuilder<'_, '_> {
                 )
             }
             Descriptor::RustStruct(class) => {
+                let ptr_ty = self.ptr_ty();
                 self.instruction(
                     &[AdapterType::Struct(class.clone())],
                     Instruction::I32FromExternrefRustOwned {
                         class: class.clone(),
                     },
-                    &[AdapterType::I32],
+                    &[ptr_ty],
                 );
             }
             Descriptor::I8 => self.number_i32(AdapterType::S8),
@@ -175,11 +176,14 @@ impl InstructionBuilder<'_, '_> {
             // Largely synthetic and can't show up
             Descriptor::ClampedU8 => unreachable!(),
 
-            Descriptor::NonNull => self.instruction(
-                &[AdapterType::NonNull],
-                Instruction::I32FromNonNull,
-                &[AdapterType::I32],
-            ),
+            Descriptor::NonNull => {
+                let ptr_ty = self.ptr_ty();
+                self.instruction(
+                    &[AdapterType::NonNull],
+                    Instruction::I32FromNonNull,
+                    &[ptr_ty],
+                )
+            }
         }
         Ok(())
     }
@@ -187,12 +191,13 @@ impl InstructionBuilder<'_, '_> {
     fn incoming_ref(&mut self, mutable: bool, arg: &Descriptor) -> Result<(), Error> {
         match arg {
             Descriptor::RustStruct(class) => {
+                let ptr_ty = self.ptr_ty();
                 self.instruction(
                     &[AdapterType::Struct(class.clone())],
                     Instruction::I32FromExternrefRustBorrow {
                         class: class.clone(),
                     },
-                    &[AdapterType::I32],
+                    &[ptr_ty],
                 );
             }
             Descriptor::Externref => {
@@ -345,12 +350,13 @@ impl InstructionBuilder<'_, '_> {
                 );
             }
             Descriptor::RustStruct(name) => {
+                let ptr_ty = self.ptr_ty();
                 self.instruction(
                     &[AdapterType::Struct(name.clone()).option()],
                     Instruction::I32FromOptionRust {
                         class: name.to_string(),
                     },
-                    &[AdapterType::I32],
+                    &[ptr_ty],
                 );
             }
 
@@ -386,11 +392,14 @@ impl InstructionBuilder<'_, '_> {
                 );
             }
 
-            Descriptor::NonNull => self.instruction(
-                &[AdapterType::NonNull.option()],
-                Instruction::I32FromOptionNonNull,
-                &[AdapterType::I32],
-            ),
+            Descriptor::NonNull => {
+                let ptr_ty = self.ptr_ty();
+                self.instruction(
+                    &[AdapterType::NonNull.option()],
+                    Instruction::I32FromOptionNonNull,
+                    &[ptr_ty],
+                )
+            }
 
             _ => bail!(
                 "unsupported optional argument type for calling Rust function from JS: {arg:?}"
