@@ -1380,10 +1380,15 @@ if (require('worker_threads').isMainThread) {{
                 ("obj.__wbg_ptr = ptr;", "obj.__wbg_ptr")
             };
 
+            let ptr_coerce = if self.memory64 {
+                "ptr = Number(ptr);"
+            } else {
+                "ptr = ptr >>> 0;"
+            };
             dst.push_str(&format!(
                 "\
                 static __wrap(ptr) {{
-                    ptr = ptr >>> 0;
+                    {ptr_coerce}
                     const obj = Object.create({identifier}.prototype);
                     {ptr_assignment}
                     {identifier}Finalization.register(obj, {register_data}, obj);
@@ -1406,7 +1411,18 @@ if (require('worker_threads').isMainThread) {{
             ));
         }
 
-        let finalization_callback = if self.config.generate_reset_state {
+        let free_fn = wasm_bindgen_shared::free_function(name);
+        let finalization_callback = if self.memory64 {
+            if self.config.generate_reset_state {
+                format!(
+                    "({{ ptr, instance }}) => {{
+                    if (instance === __wbg_instance_id) wasm.{free_fn}(BigInt(ptr), 1n);
+                }}"
+                )
+            } else {
+                format!("ptr => wasm.{free_fn}(BigInt(ptr), 1n)")
+            }
+        } else if self.config.generate_reset_state {
             format!(
                 "({{ ptr, instance }}) => {{
                 if (instance === __wbg_instance_id) wasm.{}(ptr >>> 0, 1);
@@ -1482,10 +1498,17 @@ if (require('worker_threads').isMainThread) {{
             }
         }
 
-        let mut free = format!(
-            "wasm.{}(ptr, 0)",
-            wasm_bindgen_shared::free_function(qualified)
-        );
+        let mut free = if self.memory64 {
+            format!(
+                "wasm.{}(BigInt(ptr), 0n)",
+                wasm_bindgen_shared::free_function(qualified)
+            )
+        } else {
+            format!(
+                "wasm.{}(ptr, 0)",
+                wasm_bindgen_shared::free_function(qualified)
+            )
+        };
         free = binding::maybe_wrap_try_catch(&free, self.aux.wrapped_js_tag.is_some());
         dst.push_str(&format!(
             "\
@@ -2253,7 +2276,7 @@ if (require('worker_threads').isMainThread) {{
             num: mem.num,
         };
         let ptr_fixup = if self.memory64 {
-            "ptr = Number(ptr);"
+            "ptr = Number(ptr); len = Number(len);"
         } else {
             "ptr = ptr >>> 0;"
         };
@@ -2295,10 +2318,16 @@ if (require('worker_threads').isMainThread) {{
         //
         // If `ptr` and `len` are both `0` then that means it's `None`, in that case we rely upon
         // the fact that `getObject(0)` is guaranteed to be `undefined`.
+        let ptr_fixup = if self.memory64 {
+            "ptr = Number(ptr);"
+        } else {
+            ""
+        };
         intrinsic(&mut self.intrinsics, ret.to_string().into(), || {
             format!(
                 "
                 function {ret}(ptr, len) {{
+                    {ptr_fixup}
                     if (ptr === 0) {{
                         return {get_object}(len);
                     }} else {{
@@ -2321,16 +2350,22 @@ if (require('worker_threads').isMainThread) {{
         // For wasm64, externref table indices are stored as 64-bit pointers
         // so we read with getBigInt64 and stride is 8. For wasm32 it's getUint32 / stride 4.
         let (stride, get_method, ptr_fixup) = if self.memory64 {
-            (8, "getBigInt64", "ptr = Number(ptr);")
+            (8, "getBigInt64", "ptr = Number(ptr); len = Number(len);")
         } else {
             (4, "getUint32", "ptr = ptr >>> 0;")
         };
         let idx_wrap = if self.memory64 { "Number(" } else { "" };
         let idx_wrap_end = if self.memory64 { ")" } else { "" };
+        let drop_call = if self.memory64 {
+            |drop: &str| format!("wasm.{drop}(BigInt(ptr), BigInt(len));")
+        } else {
+            |drop: &str| format!("wasm.{drop}(ptr, len);")
+        };
         match (self.aux.externref_table, self.aux.externref_drop_slice) {
             (Some(table), Some(drop)) => {
                 let table = self.export_name_of(table);
                 let drop = self.export_name_of(drop);
+                let drop_stmt = drop_call(&drop);
                 intrinsic(&mut self.intrinsics, ret.to_string().into(), || {
                     format!(
                         "
@@ -2341,7 +2376,7 @@ if (require('worker_threads').isMainThread) {{
                             for (let i = ptr; i < ptr + {stride} * len; i += {stride}) {{
                                 result.push(wasm.{table}.get({idx_wrap}mem.{get_method}(i, true){idx_wrap_end}));
                             }}
-                            wasm.{drop}(ptr, len);
+                            {drop_stmt}
                             return result;
                         }}
                         ",
@@ -2381,7 +2416,7 @@ if (require('worker_threads').isMainThread) {{
             num: mem.num,
         };
         let (stride, get_method, ptr_fixup) = if self.memory64 {
-            (8, "getBigInt64", "ptr = Number(ptr);")
+            (8, "getBigInt64", "ptr = Number(ptr); len = Number(len);")
         } else {
             (4, "getUint32", "ptr = ptr >>> 0;")
         };
@@ -2490,11 +2525,16 @@ if (require('worker_threads').isMainThread) {{
             name: name.into(),
             num: view.num,
         };
+        let ptr_fixup = if self.memory64 {
+            "ptr = Number(ptr); len = Number(len);"
+        } else {
+            "ptr = ptr >>> 0;"
+        };
         intrinsic(&mut self.intrinsics, name.into(), || {
             format!(
                 "
                 function {ret}(ptr, len) {{
-                    ptr = ptr >>> 0;
+                    {ptr_fixup}
                     return {view}().subarray(ptr / {size}, ptr / {size} + len);
                 }}
                 ",
@@ -2878,12 +2918,22 @@ if (require('worker_threads').isMainThread) {{
         // while we invoke it. If we finish and the closure wasn't
         // destroyed, then we put back the pointer so a future
         // invocation can succeed.
+        let memory64 = self.memory64;
         intrinsic(&mut self.intrinsics, "make_mut_closure".into(), || {
-            let safe_destructor = "\
+            // On wasm64, dtor is a raw wasm export expecting i64 (BigInt) params
+            let safe_destructor = if memory64 {
+                "\
+                state.dtor(BigInt(state.a), BigInt(state.b));
+                state.a = 0;
+                CLOSURE_DTORS.unregister(state);\
+                "
+            } else {
+                "\
                 state.dtor(state.a, state.b);
                 state.a = 0;
                 CLOSURE_DTORS.unregister(state);\
-                ";
+                "
+            };
             let (state_init, instance_check) = if self.config.generate_reset_state {
                 (
                     "const state = { a: arg0, b: arg1, cnt: 1, dtor, instance: __wbg_instance_id };",
@@ -2937,12 +2987,22 @@ if (require('worker_threads').isMainThread) {{
         // executing the destructor, however, we clear out the
         // `this.a` pointer to prevent it being used again the
         // future.
+        let memory64 = self.memory64;
         intrinsic(&mut self.intrinsics, "make_closure".into(), || {
-            let safe_destructor = "\
+            // On wasm64, dtor is a raw wasm export expecting i64 (BigInt) params
+            let safe_destructor = if memory64 {
+                "\
+                state.dtor(BigInt(state.a), BigInt(state.b));
+                state.a = 0;
+                CLOSURE_DTORS.unregister(state);\
+                "
+            } else {
+                "\
                 state.dtor(state.a, state.b);
                 state.a = 0;
                 CLOSURE_DTORS.unregister(state);\
-                ";
+                "
+            };
             let (state_init, instance_check) = if self.config.generate_reset_state {
                 (
                     "const state = { a: arg0, b: arg1, cnt: 1, dtor, instance: __wbg_instance_id };",
@@ -2986,23 +3046,32 @@ if (require('worker_threads').isMainThread) {{
     }
 
     fn expose_closure_finalization(&mut self) {
+        let generate_reset_state = self.config.generate_reset_state;
+        let memory64 = self.memory64;
         intrinsic(&mut self.intrinsics, "closure_finalization".into(), || {
+            let dtor_call = if memory64 {
+                "state.dtor(BigInt(state.a), BigInt(state.b))"
+            } else {
+                "state.dtor(state.a, state.b)"
+            };
             format!(
                 "
                 const CLOSURE_DTORS = (typeof FinalizationRegistry === 'undefined')
                     ? {{ register: () => {{}}, unregister: () => {{}} }}
                     : new FinalizationRegistry({});
                 ",
-                if self.config.generate_reset_state {
-                    "\
-                    state => {
-                        if (state.instance === __wbg_instance_id) {
-                            state.dtor(state.a, state.b);
-                        }
-                    }
-                    "
+                if generate_reset_state {
+                    format!(
+                        "\
+                        state => {{
+                            if (state.instance === __wbg_instance_id) {{
+                                {dtor_call};
+                            }}
+                        }}
+                        "
+                    )
                 } else {
-                    "state => state.dtor(state.a, state.b)"
+                    format!("state => {dtor_call}")
                 }
             )
             .into()
@@ -4958,18 +5027,24 @@ if (require('worker_threads').isMainThread) {{
 
         use walrus::ir::*;
 
+        let (val_type, add_op) = if self.memory64 {
+            (ValType::I64, BinaryOp::I64Add)
+        } else {
+            (ValType::I32, BinaryOp::I32Add)
+        };
+
         let mut builder =
-            walrus::FunctionBuilder::new(&mut self.module.types, &[ValType::I32], &[ValType::I32]);
+            walrus::FunctionBuilder::new(&mut self.module.types, &[val_type], &[val_type]);
         builder.name("__wbindgen_add_to_stack_pointer".to_string());
 
         let mut body = builder.func_body();
-        let arg = self.module.locals.add(ValType::I32);
+        let arg = self.module.locals.add(val_type);
 
         // Create a shim function that mutate the stack pointer
         // to avoid exporting a mutable global.
         body.local_get(arg)
             .global_get(stack_pointer)
-            .binop(BinaryOp::I32Add)
+            .binop(add_op)
             .global_set(stack_pointer)
             .global_get(stack_pointer);
 

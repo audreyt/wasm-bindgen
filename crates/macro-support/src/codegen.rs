@@ -246,20 +246,20 @@ impl ToTokens for ast::Struct {
 
             #[automatically_derived]
             impl #wasm_bindgen::convert::IntoWasmAbi for #name {
-                type Abi = u32;
+                type Abi = usize;
 
-                fn into_abi(self) -> u32 {
+                fn into_abi(self) -> usize {
                     use #wasm_bindgen::__rt::alloc::rc::Rc;
                     use #wasm_bindgen::__rt::WasmRefCell;
-                    Rc::into_raw(Rc::new(WasmRefCell::new(self))) as u32
+                    Rc::into_raw(Rc::new(WasmRefCell::new(self))) as usize
                 }
             }
 
             #[automatically_derived]
             impl #wasm_bindgen::convert::FromWasmAbi for #name {
-                type Abi = u32;
+                type Abi = usize;
 
-                unsafe fn from_abi(js: u32) -> Self {
+                unsafe fn from_abi(js: usize) -> Self {
                     use #wasm_bindgen::__rt::alloc::rc::Rc;
                     use #wasm_bindgen::__rt::core::result::Result::{Ok, Err};
                     use #wasm_bindgen::__rt::{assert_not_null, WasmRefCell};
@@ -286,11 +286,11 @@ impl ToTokens for ast::Struct {
                     #[link(wasm_import_module = "__wbindgen_placeholder__")]
                     #[cfg(all(any(target_arch = "wasm32", target_arch = "wasm64"), any(target_os = "unknown", target_os = "none")))]
                     extern "C" {
-                        fn #new_fn(ptr: u32) -> u32;
+                        fn #new_fn(ptr: usize) -> u32;
                     }
 
                     #[cfg(not(all(any(target_arch = "wasm32", target_arch = "wasm64"), any(target_os = "unknown", target_os = "none"))))]
-                    unsafe fn #new_fn(_: u32) -> u32 {
+                    unsafe fn #new_fn(_: usize) -> u32 {
                         panic!("cannot convert to JsValue outside of the Wasm target")
                     }
 
@@ -309,7 +309,7 @@ impl ToTokens for ast::Struct {
                 #[doc(hidden)]
                 // `allow_delayed` is whether it's ok to not actually free the `ptr` immediately
                 // if it's still borrowed.
-                pub unsafe extern "C-unwind" fn #free_fn(ptr: u32, allow_delayed: u32) {
+                pub unsafe extern "C-unwind" fn #free_fn(ptr: usize, allow_delayed: u32) {
                     use #wasm_bindgen::__rt::alloc::rc::Rc;
 
                     if allow_delayed != 0 {
@@ -328,7 +328,7 @@ impl ToTokens for ast::Struct {
 
             #[automatically_derived]
             impl #wasm_bindgen::convert::RefFromWasmAbi for #name {
-                type Abi = u32;
+                type Abi = usize;
                 type Anchor = #wasm_bindgen::__rt::RcRef<#name>;
 
                 unsafe fn ref_from_abi(js: Self::Abi) -> Self::Anchor {
@@ -345,7 +345,7 @@ impl ToTokens for ast::Struct {
 
             #[automatically_derived]
             impl #wasm_bindgen::convert::RefMutFromWasmAbi for #name {
-                type Abi = u32;
+                type Abi = usize;
                 type Anchor = #wasm_bindgen::__rt::RcRefMut<#name>;
 
                 unsafe fn ref_mut_from_abi(js: Self::Abi) -> Self::Anchor {
@@ -362,7 +362,7 @@ impl ToTokens for ast::Struct {
 
             #[automatically_derived]
             impl #wasm_bindgen::convert::LongRefFromWasmAbi for #name {
-                type Abi = u32;
+                type Abi = usize;
                 type Anchor = #wasm_bindgen::__rt::RcRef<#name>;
 
                 unsafe fn long_ref_from_abi(js: Self::Abi) -> Self::Anchor {
@@ -393,11 +393,11 @@ impl ToTokens for ast::Struct {
                     #[link(wasm_import_module = "__wbindgen_placeholder__")]
                     #[cfg(all(any(target_arch = "wasm32", target_arch = "wasm64"), any(target_os = "unknown", target_os = "none")))]
                     extern "C" {
-                        fn #unwrap_fn(ptr: u32) -> u32;
+                        fn #unwrap_fn(ptr: u32) -> usize;
                     }
 
                     #[cfg(not(all(any(target_arch = "wasm32", target_arch = "wasm64"), any(target_os = "unknown", target_os = "none"))))]
-                    unsafe fn #unwrap_fn(_: u32) -> u32 {
+                    unsafe fn #unwrap_fn(_: u32) -> usize {
                         panic!("cannot convert from JsValue outside of the Wasm target")
                     }
 
@@ -496,7 +496,7 @@ impl ToTokens for ast::StructField {
                 #wasm_bindgen::__wbindgen_coverage! {
                 #[cfg_attr(all(any(target_arch = "wasm32", target_arch = "wasm64"), any(target_os = "unknown", target_os = "none")), no_mangle)]
                 #[doc(hidden)]
-                pub unsafe extern "C-unwind" fn #getter(js: u32)
+                pub unsafe extern "C-unwind" fn #getter(js: usize)
                     -> #wasm_bindgen::convert::WasmRet<<#ty as #wasm_bindgen::convert::IntoWasmAbi>::Abi>
                 {
                     use #wasm_bindgen::__rt::{WasmRefCell, assert_not_null};
@@ -540,7 +540,7 @@ impl ToTokens for ast::StructField {
                 #[no_mangle]
                 #[doc(hidden)]
                 pub unsafe extern "C-unwind" fn #setter(
-                    js: u32,
+                    js: usize,
                     #(#args,)*
                 ) {
                     use #wasm_bindgen::__rt::{WasmRefCell, assert_not_null};
@@ -569,7 +569,7 @@ impl TryToTokens for ast::Export {
         let ret = Ident::new("_ret", Span::call_site());
 
         let offset = if self.method_self.is_some() {
-            args.push(quote! { me: u32 });
+            args.push(quote! { me: usize });
             1
         } else {
             0

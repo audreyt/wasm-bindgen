@@ -1539,7 +1539,10 @@ pub trait UnwrapThrowExt<T>: Sized {
     #[cfg_attr(
         any(
             debug_assertions,
-            not(all(any(target_arch = "wasm32", target_arch = "wasm64"), any(target_os = "unknown", target_os = "none")))
+            not(all(
+                any(target_arch = "wasm32", target_arch = "wasm64"),
+                any(target_os = "unknown", target_os = "none")
+            ))
         ),
         track_caller
     )]
@@ -1571,7 +1574,10 @@ pub trait UnwrapThrowExt<T>: Sized {
     #[cfg_attr(
         any(
             debug_assertions,
-            not(all(any(target_arch = "wasm32", target_arch = "wasm64"), any(target_os = "unknown", target_os = "none")))
+            not(all(
+                any(target_arch = "wasm32", target_arch = "wasm64"),
+                any(target_os = "unknown", target_os = "none")
+            ))
         ),
         track_caller
     )]
