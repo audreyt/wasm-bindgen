@@ -1628,7 +1628,6 @@ fn instruction(
             let free = js.cx.export_name_of(*free);
             js.prelude(&format!("var v{i} = {f}({ptr}, {len}).slice();"));
             if js.cx.memory64 {
-                let size = kind.size();
                 js.prelude(&format!(
                     "wasm.{free}({ptr}, {len} * {size}n, {size}n);",
                     size = kind.size()
@@ -1656,7 +1655,6 @@ fn instruction(
             }
             js.prelude(&format!("v{i} = {f}({ptr}, {len}).slice();"));
             if js.cx.memory64 {
-                let size = kind.size();
                 js.prelude(&format!(
                     "wasm.{free}({ptr}, {len} * {size}n, {size}n);",
                     size = kind.size()
