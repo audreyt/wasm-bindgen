@@ -49,3 +49,55 @@ exports.js_call_closure_returning_usize = function () {
   }
   return true;
 };
+
+// Bug #1: Option<NonNull<T>> returning None must be undefined (not 0).
+// Previously broken because 0n === 0 is false in JS.
+exports.js_test_option_nonnull_none = function () {
+  const val = wasm.wasm64_option_nonnull_none();
+  if (val !== undefined) {
+    throw new Error(`Expected undefined for None, got ${typeof val}: ${val}`);
+  }
+  return true;
+};
+
+exports.js_test_option_nonnull_some = function () {
+  const val = wasm.wasm64_option_nonnull_some();
+  if (val === undefined || val === null) {
+    throw new Error(`Expected a number for Some(NonNull), got ${val}`);
+  }
+  if (typeof val !== "number") {
+    throw new Error(`Expected number (converted from BigInt ptr), got ${typeof val}: ${val}`);
+  }
+  return true;
+};
+
+// Bug #3: Option<*const T> round-trip.
+exports.js_test_option_ptr_roundtrip = function () {
+  const none_val = wasm.wasm64_option_ptr_none();
+  if (none_val !== undefined) {
+    throw new Error(`Expected undefined for None ptr, got ${typeof none_val}: ${none_val}`);
+  }
+  const some_val = wasm.wasm64_option_ptr_some();
+  if (some_val === undefined || some_val === null) {
+    throw new Error(`Expected a value for Some(ptr), got ${some_val}`);
+  }
+  return true;
+};
+
+// Bug #2: JsValue array round-trip (stride must stay 4, not 8).
+exports.js_test_jsvalue_array_roundtrip = function () {
+  const input = ["hello", 42, true, null];
+  const result = wasm.wasm64_jsvalue_array_roundtrip(input);
+  if (!Array.isArray(result)) {
+    throw new Error(`Expected array, got ${typeof result}`);
+  }
+  if (result.length !== input.length) {
+    throw new Error(`Length mismatch: expected ${input.length}, got ${result.length}`);
+  }
+  for (let i = 0; i < input.length; i++) {
+    if (result[i] !== input[i]) {
+      throw new Error(`Mismatch at index ${i}: expected ${input[i]}, got ${result[i]}`);
+    }
+  }
+  return true;
+};

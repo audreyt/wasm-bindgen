@@ -1523,7 +1523,7 @@ fn instruction(
                 let free = js.cx.export_name_of(*free);
                 if js.cx.memory64 {
                     js.prelude(&format!(
-                        "if (Number({ptr}) !== 0) {{ wasm.{free}(BigInt(Number({ptr})), BigInt(Number({len})), 1n); }}",
+                        "if ({ptr} !== 0n) {{ wasm.{free}({ptr}, {len}, 1n); }}",
                     ));
                 } else {
                     js.prelude(&format!(
@@ -1630,7 +1630,8 @@ fn instruction(
             if js.cx.memory64 {
                 let size = kind.size();
                 js.prelude(&format!(
-                    "wasm.{free}(BigInt(Number({ptr})), BigInt(Number({len}) * {size}), BigInt({size}));"
+                    "wasm.{free}({ptr}, {len} * {size}n, {size}n);",
+                    size = kind.size()
                 ));
             } else {
                 js.prelude(&format!(
@@ -1649,7 +1650,7 @@ fn instruction(
             let free = js.cx.export_name_of(*free);
             js.prelude(&format!("let v{i};"));
             if js.cx.memory64 {
-                js.prelude(&format!("if (Number({ptr}) !== 0) {{"));
+                js.prelude(&format!("if ({ptr} !== 0n) {{"));
             } else {
                 js.prelude(&format!("if ({ptr} !== 0) {{"));
             }
@@ -1657,7 +1658,8 @@ fn instruction(
             if js.cx.memory64 {
                 let size = kind.size();
                 js.prelude(&format!(
-                    "wasm.{free}(BigInt(Number({ptr})), BigInt(Number({len}) * {size}), BigInt({size}));"
+                    "wasm.{free}({ptr}, {len} * {size}n, {size}n);",
+                    size = kind.size()
                 ));
             } else {
                 js.prelude(&format!(
@@ -1755,7 +1757,8 @@ fn instruction(
         Instruction::OptionNonNullFromI32 => {
             let val = js.pop();
             let coerced = js.coerce_ptr(&val);
-            js.push(format!("{val} === 0 ? undefined : {coerced}"));
+            let zero = if js.cx.memory64 { "0n" } else { "0" };
+            js.push(format!("{val} === {zero} ? undefined : {coerced}"));
         }
     }
     Ok(())

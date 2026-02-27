@@ -5,6 +5,7 @@ use alloc::slice;
 use alloc::vec::Vec;
 use core::cell::RefCell;
 use core::cmp::max;
+use core::convert::TryInto;
 
 externs! {
     #[link(wasm_import_module = "__wbindgen_externref_xform__")]
@@ -37,7 +38,10 @@ impl Slab {
             let curr_len = self.data.len();
             if curr_len == self.data.capacity() {
                 let extra = max(128, curr_len);
-                let r = unsafe { __wbindgen_externref_table_grow(extra as i32) };
+                let extra_i32: i32 = extra
+                    .try_into()
+                    .unwrap_or_else(|_| internal_error("table grow delta overflow"));
+                let r = unsafe { __wbindgen_externref_table_grow(extra_i32) };
                 if r == -1 {
                     internal_error("table grow failure")
                 }

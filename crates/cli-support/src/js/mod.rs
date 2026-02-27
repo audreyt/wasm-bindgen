@@ -2347,15 +2347,15 @@ if (require('worker_threads').isMainThread) {{
             name: "getArrayJsValueFromWasm".into(),
             num: mem.num,
         };
-        // For wasm64, externref table indices are stored as 64-bit pointers
-        // so we read with getBigInt64 and stride is 8. For wasm32 it's getUint32 / stride 4.
-        let (stride, get_method, ptr_fixup) = if self.memory64 {
-            (8, "getBigInt64", "ptr = Number(ptr); len = Number(len);")
+        // JsValue.idx is always u32, so we always read with getUint32 / stride 4,
+        // regardless of wasm32 or wasm64. Only ptr/len need BigInt→Number conversion on wasm64.
+        let ptr_fixup = if self.memory64 {
+            "ptr = Number(ptr); len = Number(len);"
         } else {
-            (4, "getUint32", "ptr = ptr >>> 0;")
+            "ptr = ptr >>> 0;"
         };
-        let idx_wrap = if self.memory64 { "Number(" } else { "" };
-        let idx_wrap_end = if self.memory64 { ")" } else { "" };
+        let stride = 4;
+        let get_method = "getUint32";
         let drop_call = if self.memory64 {
             |drop: &str| format!("wasm.{drop}(BigInt(ptr), BigInt(len));")
         } else {
@@ -2374,7 +2374,7 @@ if (require('worker_threads').isMainThread) {{
                             const mem = {mem}();
                             const result = [];
                             for (let i = ptr; i < ptr + {stride} * len; i += {stride}) {{
-                                result.push(wasm.{table}.get({idx_wrap}mem.{get_method}(i, true){idx_wrap_end}));
+                                result.push(wasm.{table}.get(mem.{get_method}(i, true)));
                             }}
                             {drop_stmt}
                             return result;
@@ -2394,7 +2394,7 @@ if (require('worker_threads').isMainThread) {{
                             const mem = {mem}();
                             const result = [];
                             for (let i = ptr; i < ptr + {stride} * len; i += {stride}) {{
-                                result.push(takeObject({idx_wrap}mem.{get_method}(i, true){idx_wrap_end}));
+                                result.push(takeObject(mem.{get_method}(i, true)));
                             }}
                             return result;
                         }}
@@ -2415,13 +2415,15 @@ if (require('worker_threads').isMainThread) {{
             name: "getArrayJsValueViewFromWasm".into(),
             num: mem.num,
         };
-        let (stride, get_method, ptr_fixup) = if self.memory64 {
-            (8, "getBigInt64", "ptr = Number(ptr); len = Number(len);")
+        // JsValue.idx is always u32, so we always read with getUint32 / stride 4,
+        // regardless of wasm32 or wasm64. Only ptr/len need BigInt→Number conversion on wasm64.
+        let ptr_fixup = if self.memory64 {
+            "ptr = Number(ptr); len = Number(len);"
         } else {
-            (4, "getUint32", "ptr = ptr >>> 0;")
+            "ptr = ptr >>> 0;"
         };
-        let idx_wrap = if self.memory64 { "Number(" } else { "" };
-        let idx_wrap_end = if self.memory64 { ")" } else { "" };
+        let stride = 4;
+        let get_method = "getUint32";
         match self.aux.externref_table {
             Some(table) => {
                 let table = self.export_name_of(table);
@@ -2433,7 +2435,7 @@ if (require('worker_threads').isMainThread) {{
                             const mem = {mem}();
                             const result = [];
                             for (let i = ptr; i < ptr + {stride} * len; i += {stride}) {{
-                                result.push(wasm.{table}.get({idx_wrap}mem.{get_method}(i, true){idx_wrap_end}));
+                                result.push(wasm.{table}.get(mem.{get_method}(i, true)));
                             }}
                             return result;
                         }}
@@ -2452,7 +2454,7 @@ if (require('worker_threads').isMainThread) {{
                             const mem = {mem}();
                             const result = [];
                             for (let i = ptr; i < ptr + {stride} * len; i += {stride}) {{
-                                result.push(getObject({idx_wrap}mem.{get_method}(i, true){idx_wrap_end}));
+                                result.push(getObject(mem.{get_method}(i, true)));
                             }}
                             return result;
                         }}

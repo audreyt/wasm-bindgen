@@ -490,6 +490,10 @@ unsafe impl<T: ErasableGeneric> ErasableGeneric for *const T {
 impl<T, Target> UpcastFrom<*const T> for *const Target where Target: UpcastFrom<T> {}
 impl<T, Target> UpcastFrom<*const T> for JsOption<*const Target> where Target: UpcastFrom<T> {}
 
+// On wasm32, Option<*const T> uses f64 sentinel ABI (pointer fits in 32 bits).
+// On wasm64, f64 has only 53 bits of precision and the sentinel is a valid pointer,
+// so we use Option<usize> (= Option<u64>) as the native ABI instead.
+#[cfg(target_pointer_width = "32")]
 impl<T> IntoWasmAbi for Option<*const T> {
     type Abi = f64;
 
@@ -500,6 +504,16 @@ impl<T> IntoWasmAbi for Option<*const T> {
     }
 }
 
+#[cfg(target_pointer_width = "64")]
+impl<T> IntoWasmAbi for Option<*const T> {
+    type Abi = Option<usize>;
+
+    #[inline]
+    fn into_abi(self) -> Option<usize> {
+        self.map(|ptr| ptr as usize)
+    }
+}
+
 unsafe impl<T: ErasableGeneric> ErasableGeneric for Option<T> {
     type Repr = Option<<T as ErasableGeneric>::Repr>;
 }
@@ -507,6 +521,7 @@ unsafe impl<T: ErasableGeneric> ErasableGeneric for Option<T> {
 impl<T, Target> UpcastFrom<Option<T>> for Option<Target> where Target: UpcastFrom<T> {}
 impl<T, Target> UpcastFrom<Option<T>> for JsOption<Option<Target>> where Target: UpcastFrom<T> {}
 
+#[cfg(target_pointer_width = "32")]
 impl<T> FromWasmAbi for Option<*const T> {
     type Abi = f64;
 
@@ -517,6 +532,16 @@ impl<T> FromWasmAbi for Option<*const T> {
         } else {
             Some(js as usize as *const T)
         }
+    }
+}
+
+#[cfg(target_pointer_width = "64")]
+impl<T> FromWasmAbi for Option<*const T> {
+    type Abi = Option<usize>;
+
+    #[inline]
+    unsafe fn from_abi(js: Option<usize>) -> Option<*const T> {
+        js.map(|ptr| ptr as *const T)
     }
 }
 
@@ -538,6 +563,10 @@ impl<T> FromWasmAbi for *mut T {
     }
 }
 
+// On wasm32, Option<*mut T> uses f64 sentinel ABI (pointer fits in 32 bits).
+// On wasm64, f64 has only 53 bits of precision and the sentinel is a valid pointer,
+// so we use Option<usize> (= Option<u64>) as the native ABI instead.
+#[cfg(target_pointer_width = "32")]
 impl<T> IntoWasmAbi for Option<*mut T> {
     type Abi = f64;
 
@@ -548,6 +577,17 @@ impl<T> IntoWasmAbi for Option<*mut T> {
     }
 }
 
+#[cfg(target_pointer_width = "64")]
+impl<T> IntoWasmAbi for Option<*mut T> {
+    type Abi = Option<usize>;
+
+    #[inline]
+    fn into_abi(self) -> Option<usize> {
+        self.map(|ptr| ptr as usize)
+    }
+}
+
+#[cfg(target_pointer_width = "32")]
 impl<T> FromWasmAbi for Option<*mut T> {
     type Abi = f64;
 
@@ -558,6 +598,16 @@ impl<T> FromWasmAbi for Option<*mut T> {
         } else {
             Some(js as usize as *mut T)
         }
+    }
+}
+
+#[cfg(target_pointer_width = "64")]
+impl<T> FromWasmAbi for Option<*mut T> {
+    type Abi = Option<usize>;
+
+    #[inline]
+    unsafe fn from_abi(js: Option<usize>) -> Option<*mut T> {
+        js.map(|ptr| ptr as *mut T)
     }
 }
 

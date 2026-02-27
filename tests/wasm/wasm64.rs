@@ -6,6 +6,7 @@
 
 #![cfg(test)]
 
+use std::ptr::NonNull;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_test::*;
 
@@ -15,6 +16,10 @@ extern "C" {
     fn js_roundtrip_large_slice(slice: &[u8]) -> Vec<u8>;
     fn js_create_and_free_class() -> bool;
     fn js_call_closure_returning_usize() -> bool;
+    fn js_test_option_nonnull_none() -> bool;
+    fn js_test_option_nonnull_some() -> bool;
+    fn js_test_option_ptr_roundtrip() -> bool;
+    fn js_test_jsvalue_array_roundtrip() -> bool;
 }
 
 // A simple exported class to test class creation/destruction with 64-bit pointers.
@@ -119,4 +124,53 @@ fn test_js_class_create_and_free() {
 #[wasm_bindgen_test]
 fn test_js_closure_usize() {
     assert!(js_call_closure_returning_usize());
+}
+
+// Bug #1: Option<NonNull<T>> — None must produce undefined, not 0
+#[wasm_bindgen]
+pub fn wasm64_option_nonnull_none() -> Option<NonNull<u8>> {
+    None
+}
+
+#[wasm_bindgen]
+pub fn wasm64_option_nonnull_some() -> Option<NonNull<u8>> {
+    // Use a non-null pointer (dangling is fine for this test — never dereferenced)
+    Some(NonNull::dangling())
+}
+
+#[wasm_bindgen_test]
+fn test_option_nonnull_none() {
+    assert!(js_test_option_nonnull_none());
+}
+
+#[wasm_bindgen_test]
+fn test_option_nonnull_some() {
+    assert!(js_test_option_nonnull_some());
+}
+
+// Bug #3: Option<*const T> round-trip through JS
+#[wasm_bindgen]
+pub fn wasm64_option_ptr_none() -> Option<*const u8> {
+    None
+}
+
+#[wasm_bindgen]
+pub fn wasm64_option_ptr_some() -> Option<*const u8> {
+    Some(0x42usize as *const u8)
+}
+
+#[wasm_bindgen_test]
+fn test_option_ptr_roundtrip() {
+    assert!(js_test_option_ptr_roundtrip());
+}
+
+// Bug #2: JsValue array round-trip (stride must be 4, not 8)
+#[wasm_bindgen]
+pub fn wasm64_jsvalue_array_roundtrip(vals: Vec<JsValue>) -> Vec<JsValue> {
+    vals
+}
+
+#[wasm_bindgen_test]
+fn test_jsvalue_array_roundtrip() {
+    assert!(js_test_jsvalue_array_roundtrip());
 }
