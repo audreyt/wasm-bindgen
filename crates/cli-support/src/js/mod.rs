@@ -306,7 +306,6 @@ impl<'a> Context<'a> {
     }
 
     /// Wraps an expression with `Number()` for memory64 (BigInt→Number conversion).
-    #[allow(dead_code)]
     fn to_number(&self, expr: &str) -> String {
         if self.memory64 {
             format!("Number({expr})")
@@ -316,7 +315,6 @@ impl<'a> Context<'a> {
     }
 
     /// Wraps an expression with `BigInt()` for memory64.
-    #[allow(dead_code)]
     fn to_wasm_bigint(&self, expr: &str) -> String {
         if self.memory64 {
             format!("BigInt({expr})")
@@ -326,7 +324,6 @@ impl<'a> Context<'a> {
     }
 
     /// Returns `""` for memory64 (values are already BigInt), `" >>> 0"` for wasm32.
-    #[allow(dead_code)]
     fn ptr_coerce(&self) -> &str {
         if self.memory64 {
             ""
@@ -336,7 +333,6 @@ impl<'a> Context<'a> {
     }
 
     /// Returns `"n"` suffix for BigInt literals in memory64, `""` for wasm32.
-    #[allow(dead_code)]
     fn wasm_bigint_suffix(&self) -> &str {
         if self.memory64 {
             "n"
@@ -344,6 +340,7 @@ impl<'a> Context<'a> {
             ""
         }
     }
+
     /// Writes an ExportDefinition to global and typescript buffers.
     /// Handles realising for invalid identifier export names.
     /// define_only used when only locally declared but not explicitly exported.
@@ -2674,12 +2671,11 @@ if (require('worker_threads').isMainThread) {{
             (Some(table), Some(drop)) => {
                 let table = self.export_name_of(table);
                 let drop = self.export_name_of(drop);
-                let drop_stmt = drop_call(&drop);
-                let drop_stmt = if self.memory64 {
-                    format!("wasm.{drop}(BigInt(ptr), BigInt(len));")
-                } else {
-                    format!("wasm.{drop}(ptr, len);")
-                };
+                let drop_stmt = format!(
+                    "wasm.{drop}({}, {});",
+                    self.to_wasm_bigint("ptr"),
+                    self.to_wasm_bigint("len"),
+                );
                 self.intrinsic(ret.to_string().into(), None, {
                     format!(
                         "
