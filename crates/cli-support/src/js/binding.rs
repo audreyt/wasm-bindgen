@@ -666,20 +666,12 @@ impl<'a, 'b> JsBuilder<'a, 'b> {
     /// For wasm32: `val >>> 0` (unsigned zero-extension).
     /// For wasm64: `Number(val)` (BigInt → JS number).
     pub fn coerce_ptr(&self, val: &str) -> String {
-        if self.cx.memory64 {
-            format!("Number({val})")
-        } else {
-            format!("{val} >>> 0")
-        }
+        format!("{}{}", self.cx.to_number(val), self.cx.ptr_coerce())
     }
 
     /// Format a pointer-sized literal for the target ABI.
     pub fn size_literal(&self, size: usize) -> String {
-        if self.cx.memory64 {
-            format!("{size}n")
-        } else {
-            size.to_string()
-        }
+        format!("{size}{}", self.cx.wasm_bigint_suffix())
     }
 
     pub fn prelude(&mut self, prelude: &str) {
