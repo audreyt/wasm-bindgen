@@ -169,7 +169,11 @@ check_rustfmt() {
 
 check_taplo() {
   need_cmd taplo
-  taplo fmt --check
+  mapfile -t toml_files < <(git ls-files '*.toml')
+  if [[ ${#toml_files[@]} -eq 0 ]]; then
+    return 0
+  fi
+  taplo fmt --check "${toml_files[@]}"
 }
 
 check_clippy_native() {
@@ -659,7 +663,9 @@ expand_item() {
 run_check() {
   local check="$1"
   printf '\n==> %s\n' "$check"
-  "check_${check//-/_}"
+  (
+    "check_${check//-/_}"
+  )
 }
 
 main() {
