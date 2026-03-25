@@ -163,6 +163,31 @@ setup_examples_env() {
   need_cmd cargo
 }
 
+run_example_builds() {
+  local real_wasm_pack wrapper_dir
+
+  if [[ "${WBG_CI_EXAMPLES_USE_WASM_OPT:-0}" == 1 ]]; then
+    pnpm run -r build
+    return
+  fi
+
+  real_wasm_pack="$(command -v wasm-pack)"
+  wrapper_dir="$(mktemp -d)"
+  trap 'rm -rf "$wrapper_dir"' RETURN
+
+  cat >"$wrapper_dir/wasm-pack" <<EOF
+#!/usr/bin/env bash
+if [[ "\$1" == "build" ]]; then
+  shift
+  exec "$real_wasm_pack" build --no-opt "\$@"
+fi
+exec "$real_wasm_pack" "\$@"
+EOF
+  chmod +x "$wrapper_dir/wasm-pack"
+
+  PATH="$wrapper_dir:$PATH" pnpm run -r build
+}
+
 check_rustfmt() {
   cargo fmt --all -- --check
 }
@@ -411,7 +436,7 @@ check_build_examples() {
     export PATH="$ROOT_DIR/target/debug:$PATH"
     cd examples
     pnpm install
-    pnpm run -r build
+    run_example_builds
   )
 }
 
@@ -580,6 +605,8 @@ Notes:
   - `deploy` is intentionally not runnable locally because it publishes artifacts.
   - On OrbStack kernels this runner automatically uses `clang` for browser-heavy
     host builds unless `WBG_CI_USE_CLANG_FOR_HOST=0` is set.
+  - Example builds ignore host-installed `wasm-opt` unless
+    `WBG_CI_EXAMPLES_USE_WASM_OPT=1` is set, to avoid host-tool drift.
 EOF
 }
 
