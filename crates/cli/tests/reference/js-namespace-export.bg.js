@@ -66,7 +66,7 @@ class Counter {
      */
     constructor(initial) {
         const ret = wasm.counter_new(initial);
-        this.__wbg_ptr = ret >>> 0;
+        this.__wbg_ptr = (ret >>> 0);
         CounterFinalization.register(this, this.__wbg_ptr, this);
         return this;
     }

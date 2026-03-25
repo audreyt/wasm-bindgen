@@ -14,13 +14,13 @@ export class Foo {
      */
     get lone_getter() {
         const ret = wasm.foo_lone_getter(this.__wbg_ptr);
-        return ret === 0x100000001 ? undefined : ret;
+        return ret === 9007199254740991 ? undefined : ret;
     }
     /**
      * @param {number | null} [value]
      */
     set lone_setter(value) {
-        wasm.foo_set_lone_setter(this.__wbg_ptr, isLikeNone(value) ? 0x100000001 : (value) >>> 0);
+        wasm.foo_set_lone_setter(this.__wbg_ptr, isLikeNone(value) ? 9007199254740991 : (value) >>> 0);
     }
     /**
      * But you must write strings.
@@ -43,7 +43,7 @@ export class Foo {
      * @param {number | null} [z]
      */
     set z(z) {
-        wasm.foo_set_z(this.__wbg_ptr, isLikeNone(z) ? 0x100000001 : (z) >>> 0);
+        wasm.foo_set_z(this.__wbg_ptr, isLikeNone(z) ? 9007199254740991 : (z) >>> 0);
     }
     /**
      * You will only read numbers.
@@ -67,7 +67,7 @@ export class Foo {
      */
     get z() {
         const ret = wasm.foo_z(this.__wbg_ptr);
-        return ret === 0x100000001 ? undefined : ret;
+        return ret === 9007199254740991 ? undefined : ret;
     }
     /**
      * @returns {number}
@@ -81,7 +81,7 @@ export class Foo {
      */
     get y() {
         const ret = wasm.__wbg_get_foo_y(this.__wbg_ptr);
-        return ret === 0x100000001 ? undefined : ret;
+        return ret === 9007199254740991 ? undefined : ret;
     }
     /**
      * @param {number} arg0
@@ -93,7 +93,7 @@ export class Foo {
      * @param {number | null} [arg0]
      */
     set y(arg0) {
-        wasm.__wbg_set_foo_y(this.__wbg_ptr, isLikeNone(arg0) ? 0x100000001 : (arg0) >>> 0);
+        wasm.__wbg_set_foo_y(this.__wbg_ptr, isLikeNone(arg0) ? 9007199254740991 : (arg0) >>> 0);
     }
 }
 if (Symbol.dispose) Foo.prototype[Symbol.dispose] = Foo.prototype.free;

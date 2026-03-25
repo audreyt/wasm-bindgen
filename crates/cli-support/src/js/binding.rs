@@ -666,7 +666,7 @@ impl<'a, 'b> JsBuilder<'a, 'b> {
     /// For wasm32: `val >>> 0` (unsigned zero-extension).
     /// For wasm64: `Number(val)` (BigInt → JS number).
     pub fn coerce_ptr(&self, val: &str) -> String {
-        format!("{}{}", self.cx.to_number(val), self.cx.ptr_coerce())
+        format!("({}{})", self.cx.to_number(val), self.cx.ptr_coerce())
     }
 
     /// Format a pointer-sized literal for the target ABI.
@@ -1072,7 +1072,7 @@ fn instruction(
 
         Instruction::Retptr { size } => {
             js.cx.inject_stack_pointer_shim()?;
-            let size = js.size_literal(*size);
+            let size = js.size_literal(usize::try_from(*size).unwrap());
             let memory64 = js.cx.memory64;
             if memory64 {
                 js.prelude(&format!(
@@ -1107,9 +1107,7 @@ fn instruction(
             } else {
                 val
             };
-            let expr = format!(
-                "{mem_string}.{method}({arg0} + {size} * {offset}, {val}, true);",
-            );
+            let expr = format!("{mem_string}.{method}({arg0} + {size} * {offset}, {val}, true);",);
             js.prelude(&expr);
         }
 
@@ -1662,7 +1660,9 @@ fn instruction(
 
         Instruction::OptionF64Sentinel => {
             let val = js.pop();
-            js.push(format!("{val} === {F64_OPTION_SENTINEL} ? undefined : {val}"));
+            js.push(format!(
+                "{val} === {F64_OPTION_SENTINEL} ? undefined : {val}"
+            ));
         }
 
         Instruction::OptionU32Sentinel => {

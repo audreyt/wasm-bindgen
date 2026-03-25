@@ -21,7 +21,7 @@ class _default {
      */
     constructor(value) {
         const ret = wasm.default_new(value);
-        this.__wbg_ptr = ret >>> 0;
+        this.__wbg_ptr = (ret >>> 0);
         _defaultFinalization.register(this, this.__wbg_ptr, this);
         return this;
     }

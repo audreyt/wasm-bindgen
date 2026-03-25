@@ -1629,7 +1629,7 @@ if (require('worker_threads').isMainThread) {{
             ));
         }
 
-        let free_fn = wasm_bindgen_shared::free_function(name);
+        let free_fn = wasm_bindgen_shared::free_function(qualified);
         let finalization_callback = if self.memory64 {
             if self.config.generate_reset_state {
                 format!(
@@ -1713,12 +1713,9 @@ if (require('worker_threads').isMainThread) {{
         }
 
         let mut free = if self.memory64 {
-            format!(
-                "wasm.{}(BigInt(ptr), 0n)",
-                wasm_bindgen_shared::free_function(name)
-            )
+            format!("wasm.{free_fn}(BigInt(ptr), 0n)")
         } else {
-            format!("wasm.{}(ptr, 0)", wasm_bindgen_shared::free_function(name))
+            format!("wasm.{free_fn}(ptr, 0)")
         };
         free = binding::maybe_wrap_try_catch(&free, self.aux.wrapped_js_tag.is_some());
         dst.push_str(&format!(

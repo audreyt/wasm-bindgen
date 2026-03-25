@@ -142,8 +142,8 @@ export function echo_option_char(a) {
  * @returns {number | undefined}
  */
 export function echo_option_f32(a) {
-    const ret = wasm.echo_option_f32(isLikeNone(a) ? 0x100000001 : Math.fround(a));
-    return ret === 0x100000001 ? undefined : ret;
+    const ret = wasm.echo_option_f32(isLikeNone(a) ? 9007199254740991 : Math.fround(a));
+    return ret === 9007199254740991 ? undefined : ret;
 }
 
 /**
@@ -178,8 +178,8 @@ export function echo_option_i16(a) {
  * @returns {number | undefined}
  */
 export function echo_option_i32(a) {
-    const ret = wasm.echo_option_i32(isLikeNone(a) ? 0x100000001 : (a) >> 0);
-    return ret === 0x100000001 ? undefined : ret;
+    const ret = wasm.echo_option_i32(isLikeNone(a) ? 9007199254740991 : (a) >> 0);
+    return ret === 9007199254740991 ? undefined : ret;
 }
 
 /**
@@ -205,8 +205,8 @@ export function echo_option_i8(a) {
  * @returns {number | undefined}
  */
 export function echo_option_isize(a) {
-    const ret = wasm.echo_option_isize(isLikeNone(a) ? 0x100000001 : (a) >> 0);
-    return ret === 0x100000001 ? undefined : ret;
+    const ret = wasm.echo_option_isize(isLikeNone(a) ? 9007199254740991 : (a) >> 0);
+    return ret === 9007199254740991 ? undefined : ret;
 }
 
 /**
@@ -218,7 +218,7 @@ export function echo_option_string(a) {
     var len0 = WASM_VECTOR_LEN;
     const ret = wasm.echo_option_string(ptr0, len0);
     let v2;
-    if (ret[0] !== 0) {
+    if (ret[0]) {
         v2 = getStringFromWasm0(ret[0], ret[1]).slice();
         wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
     }
@@ -236,7 +236,7 @@ export function echo_option_struct(a) {
         ptr0 = a.__destroy_into_raw();
     }
     const ret = wasm.echo_option_struct(ptr0);
-    return ret === 0 ? undefined : Foo.__wrap(ret);
+    return ret ? Foo.__wrap(ret) : undefined;
 }
 
 /**
@@ -262,8 +262,8 @@ export function echo_option_u16(a) {
  * @returns {number | undefined}
  */
 export function echo_option_u32(a) {
-    const ret = wasm.echo_option_u32(isLikeNone(a) ? 0x100000001 : (a) >>> 0);
-    return ret === 0x100000001 ? undefined : ret;
+    const ret = wasm.echo_option_u32(isLikeNone(a) ? 9007199254740991 : (a) >>> 0);
+    return ret === 9007199254740991 ? undefined : ret;
 }
 
 /**
@@ -289,8 +289,8 @@ export function echo_option_u8(a) {
  * @returns {number | undefined}
  */
 export function echo_option_usize(a) {
-    const ret = wasm.echo_option_usize(isLikeNone(a) ? 0x100000001 : (a) >>> 0);
-    return ret === 0x100000001 ? undefined : ret;
+    const ret = wasm.echo_option_usize(isLikeNone(a) ? 9007199254740991 : (a) >>> 0);
+    return ret === 9007199254740991 ? undefined : ret;
 }
 
 /**
@@ -302,7 +302,7 @@ export function echo_option_vec_i16(a) {
     var len0 = WASM_VECTOR_LEN;
     const ret = wasm.echo_option_vec_i16(ptr0, len0);
     let v2;
-    if (ret[0] !== 0) {
+    if (ret[0]) {
         v2 = getArrayI16FromWasm0(ret[0], ret[1]).slice();
         wasm.__wbindgen_free(ret[0], ret[1] * 2, 2);
     }
@@ -318,7 +318,7 @@ export function echo_option_vec_i32(a) {
     var len0 = WASM_VECTOR_LEN;
     const ret = wasm.echo_option_vec_i32(ptr0, len0);
     let v2;
-    if (ret[0] !== 0) {
+    if (ret[0]) {
         v2 = getArrayI32FromWasm0(ret[0], ret[1]).slice();
         wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
     }
@@ -334,7 +334,7 @@ export function echo_option_vec_i64(a) {
     var len0 = WASM_VECTOR_LEN;
     const ret = wasm.echo_option_vec_i64(ptr0, len0);
     let v2;
-    if (ret[0] !== 0) {
+    if (ret[0]) {
         v2 = getArrayI64FromWasm0(ret[0], ret[1]).slice();
         wasm.__wbindgen_free(ret[0], ret[1] * 8, 8);
     }
@@ -350,7 +350,7 @@ export function echo_option_vec_i8(a) {
     var len0 = WASM_VECTOR_LEN;
     const ret = wasm.echo_option_vec_i8(ptr0, len0);
     let v2;
-    if (ret[0] !== 0) {
+    if (ret[0]) {
         v2 = getArrayI8FromWasm0(ret[0], ret[1]).slice();
         wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
     }
@@ -366,7 +366,7 @@ export function echo_option_vec_string(a) {
     var len0 = WASM_VECTOR_LEN;
     const ret = wasm.echo_option_vec_string(ptr0, len0);
     let v2;
-    if (ret[0] !== 0) {
+    if (ret[0]) {
         v2 = getArrayJsValueFromWasm0(ret[0], ret[1]).slice();
         wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
     }
@@ -382,7 +382,7 @@ export function echo_option_vec_struct(a) {
     var len0 = WASM_VECTOR_LEN;
     const ret = wasm.echo_option_vec_struct(ptr0, len0);
     let v2;
-    if (ret[0] !== 0) {
+    if (ret[0]) {
         v2 = getArrayJsValueFromWasm0(ret[0], ret[1]).slice();
         wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
     }
@@ -398,7 +398,7 @@ export function echo_option_vec_u16(a) {
     var len0 = WASM_VECTOR_LEN;
     const ret = wasm.echo_option_vec_u16(ptr0, len0);
     let v2;
-    if (ret[0] !== 0) {
+    if (ret[0]) {
         v2 = getArrayU16FromWasm0(ret[0], ret[1]).slice();
         wasm.__wbindgen_free(ret[0], ret[1] * 2, 2);
     }
@@ -414,7 +414,7 @@ export function echo_option_vec_u32(a) {
     var len0 = WASM_VECTOR_LEN;
     const ret = wasm.echo_option_vec_u32(ptr0, len0);
     let v2;
-    if (ret[0] !== 0) {
+    if (ret[0]) {
         v2 = getArrayU32FromWasm0(ret[0], ret[1]).slice();
         wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
     }
@@ -430,7 +430,7 @@ export function echo_option_vec_u64(a) {
     var len0 = WASM_VECTOR_LEN;
     const ret = wasm.echo_option_vec_u64(ptr0, len0);
     let v2;
-    if (ret[0] !== 0) {
+    if (ret[0]) {
         v2 = getArrayU64FromWasm0(ret[0], ret[1]).slice();
         wasm.__wbindgen_free(ret[0], ret[1] * 8, 8);
     }
@@ -446,7 +446,7 @@ export function echo_option_vec_u8(a) {
     var len0 = WASM_VECTOR_LEN;
     const ret = wasm.echo_option_vec_u8(ptr0, len0);
     let v2;
-    if (ret[0] !== 0) {
+    if (ret[0]) {
         v2 = getArrayU8FromWasm0(ret[0], ret[1]).slice();
         wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
     }
@@ -462,7 +462,7 @@ export function echo_option_vec_uninit_i16(a) {
     var len0 = WASM_VECTOR_LEN;
     const ret = wasm.echo_option_vec_uninit_i16(ptr0, len0);
     let v2;
-    if (ret[0] !== 0) {
+    if (ret[0]) {
         v2 = getArrayI16FromWasm0(ret[0], ret[1]).slice();
         wasm.__wbindgen_free(ret[0], ret[1] * 2, 2);
     }
@@ -478,7 +478,7 @@ export function echo_option_vec_uninit_i32(a) {
     var len0 = WASM_VECTOR_LEN;
     const ret = wasm.echo_option_vec_uninit_i32(ptr0, len0);
     let v2;
-    if (ret[0] !== 0) {
+    if (ret[0]) {
         v2 = getArrayI32FromWasm0(ret[0], ret[1]).slice();
         wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
     }
@@ -494,7 +494,7 @@ export function echo_option_vec_uninit_i64(a) {
     var len0 = WASM_VECTOR_LEN;
     const ret = wasm.echo_option_vec_uninit_i64(ptr0, len0);
     let v2;
-    if (ret[0] !== 0) {
+    if (ret[0]) {
         v2 = getArrayI64FromWasm0(ret[0], ret[1]).slice();
         wasm.__wbindgen_free(ret[0], ret[1] * 8, 8);
     }
@@ -510,7 +510,7 @@ export function echo_option_vec_uninit_i8(a) {
     var len0 = WASM_VECTOR_LEN;
     const ret = wasm.echo_option_vec_uninit_i8(ptr0, len0);
     let v2;
-    if (ret[0] !== 0) {
+    if (ret[0]) {
         v2 = getArrayI8FromWasm0(ret[0], ret[1]).slice();
         wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
     }
@@ -526,7 +526,7 @@ export function echo_option_vec_uninit_u16(a) {
     var len0 = WASM_VECTOR_LEN;
     const ret = wasm.echo_option_vec_uninit_u16(ptr0, len0);
     let v2;
-    if (ret[0] !== 0) {
+    if (ret[0]) {
         v2 = getArrayU16FromWasm0(ret[0], ret[1]).slice();
         wasm.__wbindgen_free(ret[0], ret[1] * 2, 2);
     }
@@ -542,7 +542,7 @@ export function echo_option_vec_uninit_u32(a) {
     var len0 = WASM_VECTOR_LEN;
     const ret = wasm.echo_option_vec_uninit_u32(ptr0, len0);
     let v2;
-    if (ret[0] !== 0) {
+    if (ret[0]) {
         v2 = getArrayU32FromWasm0(ret[0], ret[1]).slice();
         wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
     }
@@ -558,7 +558,7 @@ export function echo_option_vec_uninit_u64(a) {
     var len0 = WASM_VECTOR_LEN;
     const ret = wasm.echo_option_vec_uninit_u64(ptr0, len0);
     let v2;
-    if (ret[0] !== 0) {
+    if (ret[0]) {
         v2 = getArrayU64FromWasm0(ret[0], ret[1]).slice();
         wasm.__wbindgen_free(ret[0], ret[1] * 8, 8);
     }
@@ -574,7 +574,7 @@ export function echo_option_vec_uninit_u8(a) {
     var len0 = WASM_VECTOR_LEN;
     const ret = wasm.echo_option_vec_uninit_u8(ptr0, len0);
     let v2;
-    if (ret[0] !== 0) {
+    if (ret[0]) {
         v2 = getArrayU8FromWasm0(ret[0], ret[1]).slice();
         wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
     }
@@ -902,16 +902,16 @@ export function __wbg___wbindgen_debug_string_5398f5bb970e0daa(arg0, arg1) {
     const ret = debugString(arg1);
     const ptr1 = passStringToWasm0(ret, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
     const len1 = WASM_VECTOR_LEN;
-    getDataViewMemory0().setInt32(arg0 + 4 * 1, len1, true);
-    getDataViewMemory0().setInt32(arg0 + 4 * 0, ptr1, true);
+    getDataViewMemory0().setInt32((arg0 >>> 0) + 4 * 1, len1, true);
+    getDataViewMemory0().setInt32((arg0 >>> 0) + 4 * 0, ptr1, true);
 }
 export function __wbg___wbindgen_string_get_395e606bd0ee4427(arg0, arg1) {
     const obj = arg1;
     const ret = typeof(obj) === 'string' ? obj : undefined;
     var ptr1 = isLikeNone(ret) ? 0 : passStringToWasm0(ret, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
     var len1 = WASM_VECTOR_LEN;
-    getDataViewMemory0().setInt32(arg0 + 4 * 1, len1, true);
-    getDataViewMemory0().setInt32(arg0 + 4 * 0, ptr1, true);
+    getDataViewMemory0().setInt32((arg0 >>> 0) + 4 * 1, len1, true);
+    getDataViewMemory0().setInt32((arg0 >>> 0) + 4 * 0, ptr1, true);
 }
 export function __wbg___wbindgen_throw_6ddd609b62940d55(arg0, arg1) {
     throw new Error(getStringFromWasm0(arg0, arg1));
