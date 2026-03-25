@@ -18,7 +18,7 @@ class Array2 {
     }
     constructor() {
         const ret = wasm.array_new();
-        this.__wbg_ptr = ret >>> 0;
+        this.__wbg_ptr = (ret >>> 0);
         Array2Finalization.register(this, this.__wbg_ptr, this);
         return this;
     }

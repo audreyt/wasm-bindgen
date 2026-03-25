@@ -15,7 +15,7 @@ class Point {
      */
     constructor(x, y) {
         const ret = wasm.barpoint_new(x, y);
-        this.__wbg_ptr = ret >>> 0;
+        this.__wbg_ptr = (ret >>> 0);
         PointFinalization.register(this, this.__wbg_ptr, this);
         return this;
     }
@@ -97,7 +97,7 @@ class Point2 {
      */
     constructor(x) {
         const ret = wasm.foopoint_new(x);
-        this.__wbg_ptr = ret >>> 0;
+        this.__wbg_ptr = (ret >>> 0);
         Point2Finalization.register(this, this.__wbg_ptr, this);
         return this;
     }

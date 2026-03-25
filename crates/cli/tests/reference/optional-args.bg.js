@@ -4,7 +4,7 @@
  * @param {number | null} [c]
  */
 export function all_optional(a, b, c) {
-    wasm.all_optional(isLikeNone(a) ? 0x100000001 : (a) >>> 0, isLikeNone(b) ? 0x100000001 : (b) >>> 0, isLikeNone(c) ? 0x100000001 : (c) >>> 0);
+    wasm.all_optional(isLikeNone(a) ? 9007199254740991 : (a) >>> 0, isLikeNone(b) ? 9007199254740991 : (b) >>> 0, isLikeNone(c) ? 9007199254740991 : (c) >>> 0);
 }
 
 /**
@@ -13,7 +13,7 @@ export function all_optional(a, b, c) {
  * @param {number | null} [c]
  */
 export function some_optional(a, b, c) {
-    wasm.some_optional(isLikeNone(a) ? 0x100000001 : (a) >>> 0, b, isLikeNone(c) ? 0x100000001 : (c) >>> 0);
+    wasm.some_optional(isLikeNone(a) ? 9007199254740991 : (a) >>> 0, b, isLikeNone(c) ? 9007199254740991 : (c) >>> 0);
 }
 export function __wbindgen_init_externref_table() {
     const table = wasm.__wbindgen_externrefs;

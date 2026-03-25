@@ -64,8 +64,8 @@ export function __wbg___wbindgen_debug_string_5398f5bb970e0daa(arg0, arg1) {
     const ret = debugString(arg1);
     const ptr1 = passStringToWasm0(ret, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
     const len1 = WASM_VECTOR_LEN;
-    getDataViewMemory0().setInt32(arg0 + 4 * 1, len1, true);
-    getDataViewMemory0().setInt32(arg0 + 4 * 0, ptr1, true);
+    getDataViewMemory0().setInt32((arg0 >>> 0) + 4 * 1, len1, true);
+    getDataViewMemory0().setInt32((arg0 >>> 0) + 4 * 0, ptr1, true);
 }
 export function __wbg___wbindgen_is_falsy_30906e697739fcc2(arg0) {
     const ret = !arg0;

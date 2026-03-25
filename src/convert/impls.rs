@@ -217,11 +217,113 @@ macro_rules! type_wasm_native_f64_option {
 
 type_wasm_native_f64_option!(
     i32 as i32
-    isize as isize
     u32 as u32
-    usize as usize
     f32 as f32
 );
+
+impl IntoWasmAbi for usize {
+    type Abi = usize;
+
+    #[inline]
+    fn into_abi(self) -> usize {
+        self
+    }
+}
+
+impl FromWasmAbi for usize {
+    type Abi = usize;
+
+    #[inline]
+    unsafe fn from_abi(js: usize) -> Self {
+        js
+    }
+}
+
+impl IntoWasmAbi for Option<usize> {
+    type Abi = f64;
+
+    #[inline]
+    fn into_abi(self) -> Self::Abi {
+        self.map(|v| v as f64).unwrap_or(F64_ABI_OPTION_SENTINEL)
+    }
+}
+
+impl FromWasmAbi for Option<usize> {
+    type Abi = f64;
+
+    #[inline]
+    unsafe fn from_abi(js: Self::Abi) -> Self {
+        if js == F64_ABI_OPTION_SENTINEL {
+            None
+        } else {
+            Some(js as usize)
+        }
+    }
+}
+
+unsafe impl ErasableGeneric for usize {
+    type Repr = usize;
+}
+
+impl Promising for usize {
+    type Resolution = usize;
+}
+
+impl UpcastFrom<usize> for JsValue {}
+impl UpcastFrom<usize> for JsOption<JsValue> {}
+impl UpcastFrom<usize> for usize {}
+
+impl IntoWasmAbi for isize {
+    type Abi = usize;
+
+    #[inline]
+    fn into_abi(self) -> usize {
+        self as usize
+    }
+}
+
+impl FromWasmAbi for isize {
+    type Abi = usize;
+
+    #[inline]
+    unsafe fn from_abi(js: usize) -> Self {
+        js as isize
+    }
+}
+
+impl IntoWasmAbi for Option<isize> {
+    type Abi = f64;
+
+    #[inline]
+    fn into_abi(self) -> Self::Abi {
+        self.map(|v| v as f64).unwrap_or(F64_ABI_OPTION_SENTINEL)
+    }
+}
+
+impl FromWasmAbi for Option<isize> {
+    type Abi = f64;
+
+    #[inline]
+    unsafe fn from_abi(js: Self::Abi) -> Self {
+        if js == F64_ABI_OPTION_SENTINEL {
+            None
+        } else {
+            Some(js as isize)
+        }
+    }
+}
+
+unsafe impl ErasableGeneric for isize {
+    type Repr = isize;
+}
+
+impl Promising for isize {
+    type Resolution = isize;
+}
+
+impl UpcastFrom<isize> for JsValue {}
+impl UpcastFrom<isize> for JsOption<JsValue> {}
+impl UpcastFrom<isize> for isize {}
 
 #[cfg(target_pointer_width = "32")]
 impl UpcastFrom<isize> for i32 {}
