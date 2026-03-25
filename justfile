@@ -1,6 +1,21 @@
 default:
     @just --list
 
+ci-list:
+    ./scripts/ci/run-local-checks.sh list
+
+ci *CHECKS:
+    ./scripts/ci/run-local-checks.sh {{CHECKS}}
+
+ci-pr:
+    ./scripts/ci/run-local-checks.sh pr
+
+ci-release:
+    ./scripts/ci/run-local-checks.sh release
+
+ci-full:
+    ./scripts/ci/run-local-checks.sh full
+
 clippy *ARGS="":
     cargo clippy --all-features --workspace --lib --bins --tests --examples {{ARGS}} -- -D warnings
 

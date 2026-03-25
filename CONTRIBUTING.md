@@ -9,6 +9,11 @@ This project includes a [`justfile`](https://github.com/casey/just) as a conveni
 
 Available commands:
 
+- `just ci-list` - List the checked-in local CI groups and checks
+- `just ci ...` - Run selected local CI groups or checks
+- `just ci-pr` - Run the pull request checks from the GitHub workflows locally
+- `just ci-release` - Run the release-only build checks locally
+- `just ci-full` - Run `ci-pr` plus the release-only build checks
 - `just clippy` - Run clippy linting (accepts optional args)
 - `just test` - Run all tests
 
@@ -24,6 +29,20 @@ Run individual tests (all accept test names as args):
 - `just test-web-sys` - Run the Web Sys tests
 
 To inspect failed generated tests for `just test-wasm-bindgen`, set `WASM_BINDGEN_KEEP_TEST_BUILD=1` to retain the temporary folder for test output.
+
+## Local CI Runner
+
+The checked-in script [`scripts/ci/run-local-checks.sh`](scripts/ci/run-local-checks.sh) wraps the same commands used by the GitHub workflows and groups them by check family. By default it runs the pull request check set:
+
+- `./scripts/ci/run-local-checks.sh`
+- `./scripts/ci/run-local-checks.sh pr`
+- `./scripts/ci/run-local-checks.sh list`
+- `./scripts/ci/run-local-checks.sh web-sys-unstable webidl-tests-next`
+- `just ci rustfmt cli-reference-typescript`
+
+The runner expects the external tools used by the corresponding GitHub jobs to already be installed, such as Firefox/geckodriver, Node/npm/pnpm, Deno, mdBook, Taplo, cargo-llvm-cov, Emscripten, and wasm-pack.
+
+On OrbStack-backed Linux containers the runner automatically switches browser-heavy host builds to `clang` unless `WBG_CI_USE_CLANG_FOR_HOST=0` is set. This avoids a Rosetta/GCC failure in `ring` that does not happen on GitHub Actions. The `native` wrapper also applies the serialized `wasm-bindgen-cli` test-runner fallback that was needed locally to avoid an OrbStack artifact copy race.
 
 Update fixtures:
 
