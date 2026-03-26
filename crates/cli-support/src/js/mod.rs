@@ -1699,7 +1699,7 @@ if (require('worker_threads').isMainThread) {{
         }
 
         if class.unwrap_needed {
-            let unwrap_null = format!("0{}", self.wasm_bigint_suffix());
+            let unwrap_null = "0";
             let unwrap_checks = {
                 let mut checks = String::new();
                 if self.config.generate_reset_state {
@@ -1722,10 +1722,7 @@ if (require('worker_threads').isMainThread) {{
                 }
                 checks
             };
-            let unwrap_ptr = format!(
-                "return {};",
-                self.to_wasm_bigint("jsValue.__destroy_into_raw()")
-            );
+            let unwrap_ptr = "return jsValue.__destroy_into_raw();";
             dst.push_str(&format!(
                 "\
                 static __unwrap(jsValue) {{
@@ -4837,7 +4834,12 @@ function __wbg_handle_catch(e) {{
                 assert!(!variadic);
                 assert_eq!(args.len(), 1);
                 let identifier = self.require_class_unwrap(class);
-                Ok(format!("{identifier}.__unwrap({})", args[0]))
+                let unwrap = format!("{identifier}.__unwrap({})", args[0]);
+                if self.memory64 {
+                    Ok(self.to_wasm_bigint(&unwrap))
+                } else {
+                    Ok(unwrap)
+                }
             }
         }
     }
