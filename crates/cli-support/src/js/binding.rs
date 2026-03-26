@@ -666,7 +666,7 @@ impl<'a, 'b> JsBuilder<'a, 'b> {
     /// For wasm32: `val >>> 0` (unsigned zero-extension).
     /// For wasm64: `Number(val)` (BigInt → JS number).
     pub fn coerce_ptr(&self, val: &str) -> String {
-        format!("({}{})", self.cx.to_number(val), self.cx.ptr_coerce())
+        self.cx.to_js_ptr(val)
     }
 
     /// Coerce a wasm value to a pointer-sized JS value for the public API.
@@ -681,7 +681,7 @@ impl<'a, 'b> JsBuilder<'a, 'b> {
 
     /// Format a pointer-sized literal for the target ABI.
     pub fn size_literal(&self, size: usize) -> String {
-        format!("{size}{}", self.cx.wasm_bigint_suffix())
+        self.cx.usize_literal(size)
     }
 
     pub fn prelude(&mut self, prelude: &str) {
@@ -1819,7 +1819,6 @@ impl Invocation {
                     None => cx.export_name_of(*id),
                 };
                 if cx.memory64 {
-                    // On memory64, i64 parameters need BigInt wrapping
                     let ty = cx.module.funcs.get(*id).ty();
                     let ty = cx.module.types.get(ty);
                     let wrapped_args: Vec<String> = args
@@ -1827,7 +1826,7 @@ impl Invocation {
                         .zip(ty.params().iter())
                         .map(|(arg, param_ty)| {
                             if *param_ty == walrus::ValType::I64 {
-                                format!("BigInt({arg})")
+                                format!("((v) => typeof v === 'bigint' ? v : BigInt(v))({arg})")
                             } else {
                                 arg.clone()
                             }

@@ -332,6 +332,16 @@ impl<'a> Context<'a> {
         }
     }
 
+    /// Coerce a wasm pointer-sized expression to an unsigned JS pointer expression.
+    fn coerce_ptr_expr(&self, expr: &str) -> String {
+        format!("{}{}", self.to_number(expr), self.ptr_coerce())
+    }
+
+    /// Coerce a wasm pointer-sized value to an unsigned JS pointer.
+    fn to_js_ptr(&self, expr: &str) -> String {
+        format!("({})", self.coerce_ptr_expr(expr))
+    }
+
     /// Returns `"n"` suffix for BigInt literals in memory64, `""` for wasm32.
     fn wasm_bigint_suffix(&self) -> &str {
         if self.memory64 {
@@ -339,6 +349,33 @@ impl<'a> Context<'a> {
         } else {
             ""
         }
+    }
+
+    /// Formats a pointer-sized literal for the current target ABI.
+    fn usize_literal(&self, value: usize) -> String {
+        format!("{value}{}", self.wasm_bigint_suffix())
+    }
+
+    /// Allocates `size_expr` bytes with `malloc` and returns a JS pointer.
+    fn malloc_ptr(&self, size_expr: &str, align: usize) -> String {
+        let size = self.to_wasm_bigint(size_expr);
+        let align = self.usize_literal(align);
+        self.coerce_ptr_expr(&format!("malloc({size}, {align})"))
+    }
+
+    /// Reallocates `ptr_expr` with `realloc` and returns a JS pointer.
+    fn realloc_ptr(
+        &self,
+        ptr_expr: &str,
+        old_size_expr: &str,
+        new_size_expr: &str,
+        align: usize,
+    ) -> String {
+        let ptr = self.to_wasm_bigint(ptr_expr);
+        let old_size = self.to_wasm_bigint(old_size_expr);
+        let new_size = self.to_wasm_bigint(new_size_expr);
+        let align = self.usize_literal(align);
+        self.coerce_ptr_expr(&format!("realloc({ptr}, {old_size}, {new_size}, {align})"))
     }
 
     /// Writes an ExportDefinition to global and typescript buffers.
@@ -1610,11 +1647,7 @@ if (require('worker_threads').isMainThread) {{
                 ("obj.__wbg_ptr = ptr;", "obj.__wbg_ptr")
             };
 
-            let ptr_coerce = if self.memory64 {
-                "ptr = Number(ptr);"
-            } else {
-                "ptr = ptr >>> 0;"
-            };
+            let ptr_coerce = format!("ptr = {};", self.coerce_ptr_expr("ptr"));
             dst.push_str(&format!(
                 "\
                 static __wrap(ptr) {{
@@ -2189,7 +2222,6 @@ if (require('worker_threads').isMainThread) {{
         // Ensure the encoder and its polyfills are registered
         self.expose_text_encoder(memory);
         let is_emscripten = matches!(self.config.mode, OutputMode::Emscripten);
-        let memory64 = self.memory64;
         let mem_formatted = mem.access(is_emscripten);
         self.intrinsic(ret.to_string().into(), None, {
             let debug = if self.config.debug {
@@ -2202,27 +2234,10 @@ if (require('worker_threads').isMainThread) {{
             } else {
                 ""
             };
-            let malloc_buf = if memory64 {
-                "Number(malloc(BigInt(buf.length), 1n))".to_string()
-            } else {
-                "malloc(buf.length, 1) >>> 0".to_string()
-            };
-            let malloc_len = if memory64 {
-                "Number(malloc(BigInt(len), 1n))".to_string()
-            } else {
-                "malloc(len, 1) >>> 0".to_string()
-            };
-            let realloc_grow = if memory64 {
-                "Number(realloc(BigInt(ptr), BigInt(len), BigInt(len = offset + arg.length * 3), 1n))"
-                    .to_string()
-            } else {
-                "realloc(ptr, len, len = offset + arg.length * 3, 1) >>> 0".to_string()
-            };
-            let realloc_shrink = if memory64 {
-                "Number(realloc(BigInt(ptr), BigInt(len), BigInt(offset), 1n))".to_string()
-            } else {
-                "realloc(ptr, len, offset, 1) >>> 0".to_string()
-            };
+            let malloc_buf = self.malloc_ptr("buf.length", 1);
+            let malloc_len = self.malloc_ptr("len", 1);
+            let realloc_grow = self.realloc_ptr("ptr", "len", "len = offset + arg.length * 3", 1);
+            let realloc_shrink = self.realloc_ptr("ptr", "len", "offset", 1);
 
             let encode_as_ascii = format!(
                 "\
@@ -2324,7 +2339,6 @@ if (require('worker_threads').isMainThread) {{
         };
         self.expose_wasm_vector_len();
         let mem_formatted: String = mem.access(self.config.mode.emscripten());
-        let memory64 = self.memory64;
         match (self.aux.externref_table, self.aux.externref_alloc) {
             (Some(table), Some(alloc)) => {
                 // TODO: using `addToExternrefTable` goes back and forth between wasm
@@ -2336,11 +2350,7 @@ if (require('worker_threads').isMainThread) {{
                 }
 
                 self.intrinsic(ret.to_string().into(), None, {
-                    let malloc_expr = if memory64 {
-                        "Number(malloc(BigInt(array.length * 4), 4n))".to_string()
-                    } else {
-                        "malloc(array.length * 4, 4) >>> 0".to_string()
-                    };
+                    let malloc_expr = self.malloc_ptr("array.length * 4", 4);
                     format!(
                         "
                         function {ret}(array, malloc) {{
@@ -2360,11 +2370,7 @@ if (require('worker_threads').isMainThread) {{
             _ => {
                 self.expose_add_heap_object();
                 self.intrinsic(ret.to_string().into(), None, {
-                    let malloc_expr = if memory64 {
-                        "Number(malloc(BigInt(array.length * 4), 4n))".to_string()
-                    } else {
-                        "malloc(array.length * 4, 4) >>> 0".to_string()
-                    };
+                    let malloc_expr = self.malloc_ptr("array.length * 4", 4);
                     format!(
                         "
                         function {ret}(array, malloc) {{
@@ -2391,13 +2397,8 @@ if (require('worker_threads').isMainThread) {{
             num: view.num,
         };
         self.expose_wasm_vector_len();
-        let memory64 = self.memory64;
         self.intrinsic(ret.to_string().into(), None, {
-            let malloc_expr = if memory64 {
-                format!("Number(malloc(BigInt(arg.length * {size}), {size}n))")
-            } else {
-                format!("malloc(arg.length * {size}, {size}) >>> 0")
-            };
+            let malloc_expr = self.malloc_ptr(&format!("arg.length * {size}"), size);
             format!(
                 "
                 function {ret}(arg, malloc) {{
