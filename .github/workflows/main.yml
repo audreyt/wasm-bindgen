@@ -160,7 +160,7 @@ jobs:
         components: rust-src
     - uses: actions/setup-node@v6
       with:
-        node-version: '20'
+        node-version: '24'
     - run: cargo test --target wasm64-unknown-unknown -Zbuild-std=std,panic_abort
 
   test_wasm_bindgen_unwind_legacy_eh:
