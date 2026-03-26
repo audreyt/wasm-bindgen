@@ -672,11 +672,7 @@ impl<'a, 'b> JsBuilder<'a, 'b> {
     /// Coerce a wasm value to a pointer-sized JS value for the public API.
     /// For wasm32 this is an unsigned JS number; for wasm64 it is a BigInt.
     pub fn coerce_raw_ptr(&self, val: &str) -> String {
-        if self.cx.memory64 {
-            format!("BigInt({val})")
-        } else {
-            format!("({val} >>> 0)")
-        }
+        self.cx.to_wasm_ptr(val)
     }
 
     /// Format a pointer-sized literal for the target ABI.
@@ -1084,18 +1080,9 @@ fn instruction(
         Instruction::Retptr { size } => {
             js.cx.inject_stack_pointer_shim()?;
             let size = js.size_literal(usize::try_from(*size).unwrap());
-            let memory64 = js.cx.memory64;
-            if memory64 {
-                js.prelude(&format!(
-                    "const retptr = Number(wasm.__wbindgen_add_to_stack_pointer(-{size}));"
-                ));
-                js.finally(&format!("wasm.__wbindgen_add_to_stack_pointer({size});"));
-            } else {
-                js.prelude(&format!(
-                    "const retptr = wasm.__wbindgen_add_to_stack_pointer(-{size});"
-                ));
-                js.finally(&format!("wasm.__wbindgen_add_to_stack_pointer({size});"));
-            }
+            let retptr = js.cx.stack_ptr_result_expr(&format!("-{size}"));
+            js.prelude(&format!("const retptr = {retptr};"));
+            js.finally(&format!("wasm.__wbindgen_add_to_stack_pointer({size});"));
             js.stack.push("retptr".to_string());
         }
 
@@ -1113,8 +1100,8 @@ fn instruction(
             let val = js.pop();
             let mem_string = mem.access(js.cx.config.mode.emscripten());
             let arg0 = js.coerce_ptr(js.arg(0));
-            let val = if js.cx.memory64 && matches!(ty, AdapterType::I64) {
-                format!("BigInt({val})")
+            let val = if matches!(ty, AdapterType::I64) {
+                js.cx.to_wasm_bigint(&val)
             } else {
                 val
             };
@@ -1739,11 +1726,12 @@ fn instruction(
             js.cx.expose_is_like_none();
             if js.cx.memory64 {
                 js.assert_optional_bigint(&val);
-                js.push(format!("isLikeNone({val}) ? 0n : BigInt({val})"));
             } else {
                 js.assert_optional_number(&val);
-                js.push(format!("isLikeNone({val}) ? 0 : {val}"));
             }
+            let zero = format!("0{}", js.cx.wasm_bigint_suffix());
+            let coerced = js.coerce_raw_ptr(&val);
+            js.push(format!("isLikeNone({val}) ? {zero} : {coerced}"));
         }
 
         Instruction::OptionNonNullFromI32 => {
@@ -1818,24 +1806,20 @@ impl Invocation {
                     Some(eid) => cx.module.exports.get(*eid).name.clone(),
                     None => cx.export_name_of(*id),
                 };
-                if cx.memory64 {
-                    let ty = cx.module.funcs.get(*id).ty();
-                    let ty = cx.module.types.get(ty);
-                    let wrapped_args: Vec<String> = args
-                        .iter()
-                        .zip(ty.params().iter())
-                        .map(|(arg, param_ty)| {
-                            if *param_ty == walrus::ValType::I64 {
-                                format!("((v) => typeof v === 'bigint' ? v : BigInt(v))({arg})")
-                            } else {
-                                arg.clone()
-                            }
-                        })
-                        .collect();
-                    Ok(format!("wasm.{name}({})", wrapped_args.join(", ")))
-                } else {
-                    Ok(format!("wasm.{name}({})", args.join(", ")))
-                }
+                let ty = cx.module.funcs.get(*id).ty();
+                let ty = cx.module.types.get(ty);
+                let wrapped_args: Vec<String> = args
+                    .iter()
+                    .zip(ty.params().iter())
+                    .map(|(arg, param_ty)| {
+                        if *param_ty == walrus::ValType::I64 {
+                            cx.to_wasm_bigint(arg)
+                        } else {
+                            arg.clone()
+                        }
+                    })
+                    .collect();
+                Ok(format!("wasm.{name}({})", wrapped_args.join(", ")))
             }
             Invocation::Adapter(id) => {
                 let adapter = &cx.wit.adapters[id];

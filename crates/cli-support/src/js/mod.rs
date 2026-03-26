@@ -323,6 +323,24 @@ impl<'a> Context<'a> {
         }
     }
 
+    /// Coerce a JS pointer-sized expression into the Wasm ABI representation.
+    fn to_wasm_ptr(&self, expr: &str) -> String {
+        if self.memory64 {
+            format!("BigInt({expr})")
+        } else {
+            format!("({expr} >>> 0)")
+        }
+    }
+
+    /// Coerce a JS pointer-sized expression into inline Wasm ABI syntax.
+    fn to_wasm_ptr_inline(&self, expr: &str) -> String {
+        if self.memory64 {
+            format!("BigInt({expr})")
+        } else {
+            format!("{expr} >>> 0")
+        }
+    }
+
     /// Returns `""` for memory64 (values are already BigInt), `" >>> 0"` for wasm32.
     fn ptr_coerce(&self) -> &str {
         if self.memory64 {
@@ -342,6 +360,20 @@ impl<'a> Context<'a> {
         format!("({})", self.coerce_ptr_expr(expr))
     }
 
+    /// Normalizes a Wasm pointer parameter for JS use.
+    fn wasm_ptr_fixup_stmt(&self, ptr: &str) -> String {
+        format!("{ptr} = {};", self.coerce_ptr_expr(ptr))
+    }
+
+    /// Normalizes a Wasm slice pointer/length pair for JS use.
+    fn wasm_slice_fixup_stmt(&self, ptr: &str, len: &str) -> String {
+        if self.memory64 {
+            format!("{ptr} = Number({ptr}); {len} = Number({len});")
+        } else {
+            self.wasm_ptr_fixup_stmt(ptr)
+        }
+    }
+
     /// Returns `"n"` suffix for BigInt literals in memory64, `""` for wasm32.
     fn wasm_bigint_suffix(&self) -> &str {
         if self.memory64 {
@@ -354,6 +386,11 @@ impl<'a> Context<'a> {
     /// Formats a pointer-sized literal for the current target ABI.
     fn usize_literal(&self, value: usize) -> String {
         format!("{value}{}", self.wasm_bigint_suffix())
+    }
+
+    /// Coerces the stack pointer shim result into a JS pointer.
+    fn stack_ptr_result_expr(&self, offset: &str) -> String {
+        self.coerce_ptr_expr(&format!("wasm.__wbindgen_add_to_stack_pointer({offset})"))
     }
 
     /// Allocates `size_expr` bytes with `malloc` and returns a JS pointer.
@@ -1685,11 +1722,10 @@ if (require('worker_threads').isMainThread) {{
                 }
                 checks
             };
-            let unwrap_ptr = if self.memory64 {
-                "return BigInt(jsValue.__destroy_into_raw());"
-            } else {
-                "return jsValue.__destroy_into_raw();"
-            };
+            let unwrap_ptr = format!(
+                "return {};",
+                self.to_wasm_bigint("jsValue.__destroy_into_raw()")
+            );
             dst.push_str(&format!(
                 "\
                 static __unwrap(jsValue) {{
@@ -1704,24 +1740,15 @@ if (require('worker_threads').isMainThread) {{
         }
 
         let free_fn = wasm_bindgen_shared::free_function(qualified);
-        let finalization_callback = if self.memory64 {
-            if self.config.generate_reset_state {
-                format!(
-                    "({{ ptr, instance }}) => {{
-                    if (instance === __wbg_instance_id) wasm.{free_fn}(BigInt(ptr), 1);
-                }}"
-                )
-            } else {
-                format!("ptr => wasm.{free_fn}(BigInt(ptr), 1)")
-            }
-        } else if self.config.generate_reset_state {
+        let free_ptr = self.to_wasm_ptr_inline("ptr");
+        let finalization_callback = if self.config.generate_reset_state {
             format!(
                 "({{ ptr, instance }}) => {{
-                    if (instance === __wbg_instance_id) wasm.{free_fn}(ptr >>> 0, 1);
+                    if (instance === __wbg_instance_id) wasm.{free_fn}({free_ptr}, 1);
                 }}"
             )
         } else {
-            format!("ptr => wasm.{free_fn}(ptr >>> 0, 1)")
+            format!("ptr => wasm.{free_fn}({free_ptr}, 1)")
         };
 
         self.globals.push_str(&format!(
@@ -1786,11 +1813,7 @@ if (require('worker_threads').isMainThread) {{
             }
         }
 
-        let mut free = if self.memory64 {
-            format!("wasm.{free_fn}(BigInt(ptr), 0)")
-        } else {
-            format!("wasm.{free_fn}(ptr, 0)")
-        };
+        let mut free = format!("wasm.{free_fn}({}, 0)", self.to_wasm_bigint("ptr"));
         free = binding::maybe_wrap_try_catch(&free, self.aux.wrapped_js_tag.is_some());
         dst.push_str(&format!(
             "\
@@ -2613,11 +2636,7 @@ if (require('worker_threads').isMainThread) {{
             name: "getStringFromWasm".into(),
             num: mem.num,
         };
-        let ptr_fixup = if self.memory64 {
-            "ptr = Number(ptr); len = Number(len);"
-        } else {
-            "ptr = ptr >>> 0;"
-        };
+        let ptr_fixup = self.wasm_slice_fixup_stmt("ptr", "len");
         self.intrinsic(ret.to_string().into(), None, {
             format!(
                 "
@@ -2656,11 +2675,7 @@ if (require('worker_threads').isMainThread) {{
         //
         // If `ptr` and `len` are both `0` then that means it's `None`, in that case we rely upon
         // the fact that `getObject(0)` is guaranteed to be `undefined`.
-        let ptr_fixup = if self.memory64 {
-            "ptr = Number(ptr);"
-        } else {
-            ""
-        };
+        let ptr_fixup = self.wasm_ptr_fixup_stmt("ptr");
         self.intrinsic(ret.to_string().into(), None, {
             format!(
                 "
@@ -2687,11 +2702,7 @@ if (require('worker_threads').isMainThread) {{
         };
         // Externref table indices remain 32-bit on both wasm32 and wasm64.
         // Only the slice pointer/length need fixups for memory64.
-        let ptr_fixup = if self.memory64 {
-            "ptr = Number(ptr); len = Number(len);"
-        } else {
-            "ptr = ptr >>> 0;"
-        };
+        let ptr_fixup = self.wasm_slice_fixup_stmt("ptr", "len");
         let stride = 4;
         let get_method = "getUint32";
         match (self.aux.externref_table, self.aux.externref_drop_slice) {
@@ -2752,11 +2763,7 @@ if (require('worker_threads').isMainThread) {{
             name: "getArrayJsValueViewFromWasm".into(),
             num: mem.num,
         };
-        let ptr_fixup = if self.memory64 {
-            "ptr = Number(ptr); len = Number(len);"
-        } else {
-            "ptr = ptr >>> 0;"
-        };
+        let ptr_fixup = self.wasm_slice_fixup_stmt("ptr", "len");
         let stride = 4;
         let get_method = "getUint32";
         match self.aux.externref_table {
@@ -2863,11 +2870,7 @@ if (require('worker_threads').isMainThread) {{
             num: view.num,
         };
         let heap_view = view.access(self.config.mode.emscripten());
-        let ptr_fixup = if self.memory64 {
-            "ptr = Number(ptr); len = Number(len);"
-        } else {
-            "ptr = ptr >>> 0;"
-        };
+        let ptr_fixup = self.wasm_slice_fixup_stmt("ptr", "len");
         self.intrinsic(name.into(), Some(&ret.to_string()), {
             format!(
                 "
@@ -3445,11 +3448,11 @@ if (require('worker_threads').isMainThread) {{
             .destroy_closure
             .expect("failed to find `__wbindgen_destroy_closure` intrinsic");
         let dtor = self.export_name_of(func_id);
-        let destroy_state = if self.memory64 {
-            format!("wasm.{dtor}(BigInt(state.a), BigInt(state.b))")
-        } else {
-            format!("wasm.{dtor}(state.a, state.b)")
-        };
+        let destroy_state = format!(
+            "wasm.{dtor}({}, {})",
+            self.to_wasm_bigint("state.a"),
+            self.to_wasm_bigint("state.b"),
+        );
         self.intrinsic("closure_finalization".into(), "CLOSURE_DTORS".into(), {
             let prevent_stale = if self.config.generate_reset_state {
                 format!(
