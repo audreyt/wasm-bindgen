@@ -197,6 +197,9 @@ fn xform_one(
         );
     }
 
+    // This transform operates on the core Wasm signature, so memory64 return
+    // pointers are still `i64` here. The JS-facing `f64` ABI is handled in the
+    // adapter layer, not in this multivalue shim.
     let ptr_ty = if memory64 {
         walrus::ValType::I64
     } else {
