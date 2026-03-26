@@ -143,8 +143,8 @@ export function echo_option_char(a) {
  * @returns {number | undefined}
  */
 export function echo_option_f32(a) {
-    const ret = wasm.echo_option_f32(isLikeNone(a) ? 9007199254740991 : Math.fround(a));
-    return ret === 9007199254740991 ? undefined : ret;
+    const ret = wasm.echo_option_f32(isLikeNone(a) ? Number.MAX_SAFE_INTEGER : Math.fround(a));
+    return ret === Number.MAX_SAFE_INTEGER ? undefined : ret;
 }
 
 /**
@@ -179,8 +179,8 @@ export function echo_option_i16(a) {
  * @returns {number | undefined}
  */
 export function echo_option_i32(a) {
-    const ret = wasm.echo_option_i32(isLikeNone(a) ? 9007199254740991 : (a) >> 0);
-    return ret === 9007199254740991 ? undefined : ret;
+    const ret = wasm.echo_option_i32(isLikeNone(a) ? Number.MAX_SAFE_INTEGER : (a) >> 0);
+    return ret === Number.MAX_SAFE_INTEGER ? undefined : ret;
 }
 
 /**
@@ -206,8 +206,8 @@ export function echo_option_i8(a) {
  * @returns {number | undefined}
  */
 export function echo_option_isize(a) {
-    const ret = wasm.echo_option_isize(isLikeNone(a) ? 9007199254740991 : (a) >> 0);
-    return ret === 9007199254740991 ? undefined : ret;
+    const ret = wasm.echo_option_isize(isLikeNone(a) ? Number.MAX_SAFE_INTEGER : (a) >> 0);
+    return ret === Number.MAX_SAFE_INTEGER ? undefined : ret;
 }
 
 /**
@@ -263,8 +263,8 @@ export function echo_option_u16(a) {
  * @returns {number | undefined}
  */
 export function echo_option_u32(a) {
-    const ret = wasm.echo_option_u32(isLikeNone(a) ? 9007199254740991 : (a) >>> 0);
-    return ret === 9007199254740991 ? undefined : ret;
+    const ret = wasm.echo_option_u32(isLikeNone(a) ? Number.MAX_SAFE_INTEGER : (a) >>> 0);
+    return ret === Number.MAX_SAFE_INTEGER ? undefined : ret;
 }
 
 /**
@@ -290,8 +290,8 @@ export function echo_option_u8(a) {
  * @returns {number | undefined}
  */
 export function echo_option_usize(a) {
-    const ret = wasm.echo_option_usize(isLikeNone(a) ? 9007199254740991 : (a) >>> 0);
-    return ret === 9007199254740991 ? undefined : ret;
+    const ret = wasm.echo_option_usize(isLikeNone(a) ? Number.MAX_SAFE_INTEGER : (a) >>> 0);
+    return ret === Number.MAX_SAFE_INTEGER ? undefined : ret;
 }
 
 /**

@@ -117,7 +117,7 @@ pub fn maybe_wrap_try_catch(call: &str, should_check_aborted: bool) -> String {
     }
 }
 
-const F64_OPTION_SENTINEL: &str = "9007199254740991";
+const F64_OPTION_SENTINEL: &str = "Number.MAX_SAFE_INTEGER";
 
 impl<'a, 'b> Builder<'a, 'b> {
     pub fn new(cx: &'a mut Context<'b>) -> Builder<'a, 'b> {
