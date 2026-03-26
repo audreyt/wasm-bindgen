@@ -103,7 +103,7 @@ use core::task::{self, Poll};
 use js_sys::BigInt;
 #[cfg(target_arch = "wasm32")]
 use js_sys::Number;
-use js_sys::{Array, Function, Promise, Undefined};
+use js_sys::{Array, Function, Promise};
 pub use wasm_bindgen;
 
 use wasm_bindgen::prelude::*;
@@ -116,16 +116,6 @@ use wasm_bindgen_futures::future_to_promise;
 // Currently the default is 1 because the DOM has a lot of shared state, and
 // conccurrently doing things by default would likely end up in a bad situation.
 const CONCURRENCY: usize = 1;
-
-#[cfg(target_arch = "wasm32")]
-type ContextArg = Number;
-#[cfg(target_arch = "wasm64")]
-type ContextArg = BigInt;
-
-#[cfg(target_arch = "wasm32")]
-type ContextFactory = Function<fn(Number) -> Undefined>;
-#[cfg(target_arch = "wasm64")]
-type ContextFactory = Function<fn(BigInt) -> Undefined>;
 
 pub mod browser;
 
@@ -418,8 +408,8 @@ impl Context {
         let cx_arg = context_arg(self);
         for test in tests {
             match test
-                .unchecked_into::<ContextFactory>()
-                .call(&JsValue::null(), (&cx_arg,))
+                .unchecked_into::<Function>()
+                .call1(&JsValue::null(), &cx_arg)
             {
                 Ok(_) => {}
                 Err(e) => {
@@ -443,13 +433,18 @@ impl Context {
 }
 
 #[cfg(target_arch = "wasm32")]
-fn context_arg(cx: &Context) -> ContextArg {
-    Number::from(cx as *const Context as u32)
+fn context_arg(cx: &Context) -> JsValue {
+    Number::from(cx as *const Context as u32).into()
 }
 
 #[cfg(target_arch = "wasm64")]
-fn context_arg(cx: &Context) -> ContextArg {
-    BigInt::from(cx as *const Context as u64)
+fn context_arg(cx: &Context) -> JsValue {
+    BigInt::from(cx as *const Context as u64).into()
+}
+
+#[cfg(not(any(target_arch = "wasm32", target_arch = "wasm64")))]
+fn context_arg(_cx: &Context) -> JsValue {
+    JsValue::NULL
 }
 
 crate::scoped_thread_local!(static CURRENT_OUTPUT: RefCell<Output>);
