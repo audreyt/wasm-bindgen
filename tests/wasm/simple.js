@@ -7,7 +7,7 @@ const pointerIndex = (ptr, stride) =>
   typeof ptr === 'bigint' ? Number(ptr / BigInt(stride)) : ptr / stride;
 
 const optionRawPointerArg = ptr =>
-  typeof ptr === 'bigint' ? Number(ptr) : ptr;
+  isWasm64() && typeof ptr === 'number' ? BigInt(ptr) : ptr;
 
 const nonNullZero = () =>
   isWasm64() ? 0n : 0;
@@ -143,15 +143,15 @@ exports.test_raw_pointers = function() {
   wasm.simple_option_raw_pointers_work(optionRawPointerArg(ptr3), optionRawPointerArg(ptr2));
   assert.strictEqual(memory32[pointerIndex(ptr3, 4)], 42);
 
-  assert.strictEqual(wasm.simple_option_raw_pointers_work(0, optionRawPointerArg(ptr2)), undefined);
+  assert.strictEqual(wasm.simple_option_raw_pointers_work(isWasm64() ? 0n : 0, optionRawPointerArg(ptr2)), undefined);
   assert.strictEqual(wasm.simple_option_raw_pointers_work(null, optionRawPointerArg(ptr2)), undefined);
   assert.strictEqual(wasm.simple_option_raw_pointers_work(undefined, optionRawPointerArg(ptr2)), undefined);
 
-  assert.strictEqual(wasm.simple_option_raw_pointers_work(optionRawPointerArg(ptr1), 0), undefined);
+  assert.strictEqual(wasm.simple_option_raw_pointers_work(optionRawPointerArg(ptr1), isWasm64() ? 0n : 0), undefined);
   assert.strictEqual(wasm.simple_option_raw_pointers_work(optionRawPointerArg(ptr1), null), undefined);
   assert.strictEqual(wasm.simple_option_raw_pointers_work(optionRawPointerArg(ptr1), undefined), undefined);
 
-  assert.strictEqual(wasm.simple_return_option_null_pointer(), 0)
+  assert.strictEqual(wasm.simple_return_option_null_pointer(), isWasm64() ? 0n : 0)
 };
 
 exports.test_non_null = function() {

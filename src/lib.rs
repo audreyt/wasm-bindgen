@@ -55,7 +55,9 @@ extern crate std;
 use crate::convert::{TryFromJsValue, UpcastFrom, VectorIntoWasmAbi};
 use crate::sys::Promising;
 use alloc::boxed::Box;
-use alloc::string::{String, ToString};
+use alloc::string::String;
+#[cfg(target_arch = "wasm64")]
+use alloc::string::ToString;
 use alloc::vec::Vec;
 use core::convert::TryFrom;
 use core::marker::PhantomData;
