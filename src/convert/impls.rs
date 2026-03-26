@@ -143,12 +143,109 @@ macro_rules! type_wasm_native {
 }
 
 type_wasm_native!(
-    i64 as i64
-    u64 as u64
     i128 as i128
     u128 as u128
     f64 as f64
 );
+
+#[cfg(not(target_arch = "wasm64"))]
+type_wasm_native!(
+    i64 as i64
+    u64 as u64
+);
+
+#[cfg(target_arch = "wasm64")]
+impl IntoWasmAbi for i64 {
+    type Abi = f64;
+
+    #[inline]
+    fn into_abi(self) -> f64 {
+        self as f64
+    }
+}
+
+#[cfg(target_arch = "wasm64")]
+impl FromWasmAbi for i64 {
+    type Abi = f64;
+
+    #[inline]
+    unsafe fn from_abi(js: f64) -> Self {
+        js as i64
+    }
+}
+
+#[cfg(target_arch = "wasm64")]
+impl IntoWasmAbi for u64 {
+    type Abi = f64;
+
+    #[inline]
+    fn into_abi(self) -> f64 {
+        self as f64
+    }
+}
+
+#[cfg(target_arch = "wasm64")]
+impl FromWasmAbi for u64 {
+    type Abi = f64;
+
+    #[inline]
+    unsafe fn from_abi(js: f64) -> Self {
+        js as u64
+    }
+}
+
+#[cfg(target_arch = "wasm64")]
+impl IntoWasmAbi for Option<i64> {
+    type Abi = Option<i64>;
+
+    #[inline]
+    fn into_abi(self) -> Self::Abi {
+        self
+    }
+}
+
+#[cfg(target_arch = "wasm64")]
+impl FromWasmAbi for Option<i64> {
+    type Abi = Option<i64>;
+
+    #[inline]
+    unsafe fn from_abi(js: Self::Abi) -> Self {
+        js
+    }
+}
+
+#[cfg(target_arch = "wasm64")]
+impl IntoWasmAbi for Option<u64> {
+    type Abi = Option<u64>;
+
+    #[inline]
+    fn into_abi(self) -> Self::Abi {
+        self
+    }
+}
+
+#[cfg(target_arch = "wasm64")]
+impl FromWasmAbi for Option<u64> {
+    type Abi = Option<u64>;
+
+    #[inline]
+    unsafe fn from_abi(js: Self::Abi) -> Self {
+        js
+    }
+}
+
+#[cfg(target_arch = "wasm64")]
+impl UpcastFrom<i64> for JsValue {}
+#[cfg(target_arch = "wasm64")]
+impl UpcastFrom<i64> for JsOption<JsValue> {}
+#[cfg(target_arch = "wasm64")]
+impl UpcastFrom<i64> for i64 {}
+#[cfg(target_arch = "wasm64")]
+impl UpcastFrom<u64> for JsValue {}
+#[cfg(target_arch = "wasm64")]
+impl UpcastFrom<u64> for JsOption<JsValue> {}
+#[cfg(target_arch = "wasm64")]
+impl UpcastFrom<u64> for u64 {}
 
 impl UpcastFrom<u64> for u128 {}
 impl UpcastFrom<u64> for JsOption<u128> {}
@@ -532,20 +629,40 @@ impl UpcastFrom<char> for JsOption<JsValue> {}
 impl UpcastFrom<char> for char {}
 
 impl<T> IntoWasmAbi for *const T {
+    #[cfg(target_arch = "wasm64")]
+    type Abi = f64;
+    #[cfg(not(target_arch = "wasm64"))]
     type Abi = usize;
 
     #[inline]
-    fn into_abi(self) -> usize {
-        self as usize
+    fn into_abi(self) -> Self::Abi {
+        #[cfg(target_arch = "wasm64")]
+        {
+            self as usize as f64
+        }
+        #[cfg(not(target_arch = "wasm64"))]
+        {
+            self as usize
+        }
     }
 }
 
 impl<T> FromWasmAbi for *const T {
+    #[cfg(target_arch = "wasm64")]
+    type Abi = f64;
+    #[cfg(not(target_arch = "wasm64"))]
     type Abi = usize;
 
     #[inline]
-    unsafe fn from_abi(js: usize) -> *const T {
-        js as *const T
+    unsafe fn from_abi(js: Self::Abi) -> *const T {
+        #[cfg(target_arch = "wasm64")]
+        {
+            js as usize as *const T
+        }
+        #[cfg(not(target_arch = "wasm64"))]
+        {
+            js as *const T
+        }
     }
 }
 
@@ -587,20 +704,40 @@ impl<T> FromWasmAbi for Option<*const T> {
 }
 
 impl<T> IntoWasmAbi for *mut T {
+    #[cfg(target_arch = "wasm64")]
+    type Abi = f64;
+    #[cfg(not(target_arch = "wasm64"))]
     type Abi = usize;
 
     #[inline]
-    fn into_abi(self) -> usize {
-        self as usize
+    fn into_abi(self) -> Self::Abi {
+        #[cfg(target_arch = "wasm64")]
+        {
+            self as usize as f64
+        }
+        #[cfg(not(target_arch = "wasm64"))]
+        {
+            self as usize
+        }
     }
 }
 
 impl<T> FromWasmAbi for *mut T {
+    #[cfg(target_arch = "wasm64")]
+    type Abi = f64;
+    #[cfg(not(target_arch = "wasm64"))]
     type Abi = usize;
 
     #[inline]
-    unsafe fn from_abi(js: usize) -> *mut T {
-        js as *mut T
+    unsafe fn from_abi(js: Self::Abi) -> *mut T {
+        #[cfg(target_arch = "wasm64")]
+        {
+            js as usize as *mut T
+        }
+        #[cfg(not(target_arch = "wasm64"))]
+        {
+            js as *mut T
+        }
     }
 }
 

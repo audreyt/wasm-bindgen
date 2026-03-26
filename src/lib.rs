@@ -55,7 +55,7 @@ extern crate std;
 use crate::convert::{TryFromJsValue, UpcastFrom, VectorIntoWasmAbi};
 use crate::sys::Promising;
 use alloc::boxed::Box;
-use alloc::string::String;
+use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use core::convert::TryFrom;
 use core::marker::PhantomData;
@@ -1037,7 +1037,14 @@ macro_rules! big_integers {
         impl From<$n> for JsValue {
             #[inline]
             fn from(arg: $n) -> JsValue {
-                wbg_cast(arg)
+                #[cfg(target_arch = "wasm64")]
+                {
+                    JsValue::bigint_from_str(&arg.to_string())
+                }
+                #[cfg(not(target_arch = "wasm64"))]
+                {
+                    wbg_cast(arg)
+                }
             }
         }
 
@@ -1053,16 +1060,26 @@ macro_rules! big_integers {
         impl TryFromJsValue for $n {
             #[inline]
             fn try_from_js_value_ref(val: &JsValue) -> Option<$n> {
-                let as_i64 = __wbindgen_bigint_get_as_i64(&val)?;
-                // Reinterpret bits; ABI-wise this is safe to do and allows us to avoid
-                // having separate intrinsics per signed/unsigned types.
-                let as_self = as_i64 as $n;
-                // Double-check that we didn't truncate the bigint to 64 bits.
-                if val == &as_self {
-                    Some(as_self)
-                } else {
-                    None
+                if let Some(as_i64) = __wbindgen_bigint_get_as_i64(val) {
+                    // Reinterpret bits; ABI-wise this is safe to do and allows us to avoid
+                    // having separate intrinsics per signed/unsigned types.
+                    let as_self = as_i64 as $n;
+                    // Double-check that we didn't truncate the bigint to 64 bits.
+                    if val == &as_self {
+                        return Some(as_self);
+                    }
                 }
+
+                #[cfg(target_arch = "wasm64")]
+                {
+                    let number = val.as_f64()?;
+                    let as_self = number as $n;
+                    if number == as_self as f64 {
+                        return Some(as_self);
+                    }
+                }
+
+                None
             }
         }
     )*)

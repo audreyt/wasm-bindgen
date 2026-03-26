@@ -89,7 +89,7 @@ impl InstructionBuilder<'_, '_> {
             Descriptor::I64 => self.number_i64(AdapterType::S64),
             Descriptor::U64 => self.number_i64(AdapterType::U64),
             Descriptor::I64AsF64 | Descriptor::U64AsF64 => {
-                unreachable!("synthetic pointer-sized sentinel descriptors must stay inside Option")
+                self.number_f64(AdapterType::F64);
             }
             Descriptor::I128 => {
                 self.instruction(
@@ -483,6 +483,10 @@ impl InstructionBuilder<'_, '_> {
     }
     fn number_i64(&mut self, input: AdapterType) {
         self.instruction(&[input], Instruction::Int64ToWasm, &[AdapterType::I64]);
+    }
+    fn number_f64(&mut self, input: AdapterType) {
+        self.get(input);
+        self.output.push(AdapterType::F64);
     }
 
     fn in_option_native(&mut self, wasm: ValType) {

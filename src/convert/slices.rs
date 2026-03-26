@@ -144,7 +144,7 @@ macro_rules! vectors_internal {
                 let len = vector.len();
                 mem::forget(vector);
                 WasmSlice {
-                    ptr: ptr.into_abi(),
+                    ptr: ptr as usize,
                     len,
                 }
             }
@@ -155,7 +155,7 @@ macro_rules! vectors_internal {
 
             #[inline]
             unsafe fn vector_from_abi(js: WasmSlice) -> Box<[$t]> {
-                let ptr = <*mut $t>::from_abi(js.ptr);
+                let ptr = js.ptr as *mut $t;
                 #[allow(clippy::unnecessary_cast)]
                 let len = js.len as usize;
                 Vec::from_raw_parts(ptr, len, len).into_boxed_slice()
@@ -168,7 +168,7 @@ macro_rules! vectors_internal {
             #[inline]
             fn into_abi(self) -> WasmSlice {
                 WasmSlice {
-                    ptr: self.as_ptr().into_abi(),
+                    ptr: self.as_ptr() as usize,
                     len: self.len(),
                 }
             }
@@ -456,7 +456,7 @@ impl<T: ErasableGeneric<Repr = JsValue> + WasmDescribe> VectorFromWasmAbi for T 
 
     #[inline]
     unsafe fn vector_from_abi(js: WasmSlice) -> Box<[Self]> {
-        let ptr = <*mut T>::from_abi(js.ptr);
+        let ptr = js.ptr as *mut T;
         #[allow(clippy::unnecessary_cast)]
         let len = js.len as usize;
         Vec::from_raw_parts(ptr, len, len).into_boxed_slice()
@@ -472,7 +472,7 @@ impl<T: ErasableGeneric<Repr = JsValue> + WasmDescribe> VectorIntoWasmAbi for T 
         let len = vector.len();
         mem::forget(vector);
         WasmSlice {
-            ptr: ptr.into_abi(),
+            ptr: ptr as usize,
             len,
         }
     }

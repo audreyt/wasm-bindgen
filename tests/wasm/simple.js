@@ -4,10 +4,10 @@ const wasm = require('wasm-bindgen-test');
 const isWasm64 = () => typeof wasm.wasm64_return_usize === 'function';
 
 const pointerIndex = (ptr, stride) =>
-  isWasm64() ? Number(ptr / BigInt(stride)) : ptr / stride;
+  typeof ptr === 'bigint' ? Number(ptr / BigInt(stride)) : ptr / stride;
 
 const optionRawPointerArg = ptr =>
-  isWasm64() ? Number(ptr) : ptr;
+  typeof ptr === 'bigint' ? Number(ptr) : ptr;
 
 const nonNullZero = () =>
   isWasm64() ? 0n : 0;

@@ -1472,7 +1472,7 @@ impl<'a> Context<'a> {
             walrus::ImportKind::Function(f) => f,
             _ => bail!("bound import must be assigned to function"),
         };
-        self.normalize_pointer_sized_option_signature(&mut signature, core_id);
+        self.normalize_memory64_signature(&mut signature, core_id);
 
         // Process the returned type first to see if it needs an out-pointer. This
         // happens if the results of the incoming arguments translated to Wasm take
@@ -1589,7 +1589,7 @@ impl<'a> Context<'a> {
             walrus::ExportItem::Function(f) => f,
             _ => bail!("bound export must be assigned to function"),
         };
-        self.normalize_pointer_sized_option_signature(&mut signature, core_id);
+        self.normalize_memory64_signature(&mut signature, core_id);
 
         // Figure out how to translate all the incoming arguments ...
         let mut args = self.instruction_builder(false);
@@ -1677,11 +1677,7 @@ impl<'a> Context<'a> {
         Ok(id)
     }
 
-    fn normalize_pointer_sized_option_signature(
-        &self,
-        signature: &mut Function,
-        core_id: FunctionId,
-    ) {
+    fn normalize_memory64_signature(&self, signature: &mut Function, core_id: FunctionId) {
         if !self.memory64() {
             return;
         }
@@ -1690,29 +1686,27 @@ impl<'a> Context<'a> {
         let (params, results) = self.module.types.params_results(ty);
 
         for (descriptor, wasm) in signature.arguments.iter_mut().zip(params.iter().copied()) {
-            Self::normalize_pointer_sized_option_descriptor(descriptor, wasm);
+            Self::normalize_memory64_descriptor(descriptor, wasm);
         }
 
         if let [result] = results {
-            Self::normalize_pointer_sized_option_descriptor(&mut signature.ret, *result);
+            Self::normalize_memory64_descriptor(&mut signature.ret, *result);
         }
     }
 
-    fn normalize_pointer_sized_option_descriptor(
-        descriptor: &mut Descriptor,
-        wasm: walrus::ValType,
-    ) {
+    fn normalize_memory64_descriptor(descriptor: &mut Descriptor, wasm: walrus::ValType) {
         if wasm != walrus::ValType::F64 {
             return;
         }
 
-        let Descriptor::Option(inner) = descriptor else {
-            return;
-        };
-
-        match inner.as_mut() {
-            Descriptor::I64 => **inner = Descriptor::I64AsF64,
-            Descriptor::U64 => **inner = Descriptor::U64AsF64,
+        match descriptor {
+            Descriptor::I64 => *descriptor = Descriptor::I64AsF64,
+            Descriptor::U64 => *descriptor = Descriptor::U64AsF64,
+            Descriptor::Option(inner) => match inner.as_mut() {
+                Descriptor::I64 => **inner = Descriptor::I64AsF64,
+                Descriptor::U64 => **inner = Descriptor::U64AsF64,
+                _ => {}
+            },
             _ => {}
         }
     }

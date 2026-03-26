@@ -100,7 +100,13 @@ mod try_from_works {
                 fn $ty() {
                     // Not a bigint.
                     assert!($ty::try_from(JsValue::NULL).is_err());
-                    assert!($ty::try_from(JsValue::from_f64(0.0)).is_err());
+                    if cfg!(target_arch = "wasm64")
+                        && (stringify!($ty) == "i64" || stringify!($ty) == "u64")
+                    {
+                        assert_eq!($ty::try_from(JsValue::from_f64(0.0)), Ok(0));
+                    } else {
+                        assert!($ty::try_from(JsValue::from_f64(0.0)).is_err());
+                    }
                     // Within range.
                     assert_eq!($ty::try_from(JsValue::from($ty::MIN)), Ok($ty::MIN));
                     // Too small.

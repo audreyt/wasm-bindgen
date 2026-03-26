@@ -68,7 +68,7 @@ impl InstructionBuilder<'_, '_> {
             Descriptor::I64 => self.outgoing_i64(AdapterType::I64),
             Descriptor::U64 => self.outgoing_i64(AdapterType::U64),
             Descriptor::I64AsF64 | Descriptor::U64AsF64 => {
-                unreachable!("synthetic pointer-sized sentinel descriptors must stay inside Option")
+                self.outgoing_f64();
             }
             Descriptor::I128 => {
                 self.instruction(
@@ -653,6 +653,10 @@ impl InstructionBuilder<'_, '_> {
             unsigned: output == AdapterType::U64,
         };
         self.instruction(&[AdapterType::I64], instr, &[output]);
+    }
+    fn outgoing_f64(&mut self) {
+        self.get(AdapterType::F64);
+        self.output.push(AdapterType::F64);
     }
 
     fn cached_string(&mut self, owned: bool) -> Result<(), Error> {
