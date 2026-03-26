@@ -8,8 +8,8 @@
  * @returns {string}
  */
 export function example(a, b, c, d) {
-    let deferred2_0;
-    let deferred2_1;
+    let deferred2_0 = 0;
+    let deferred2_1 = 0;
     try {
         const ptr0 = passStringToWasm0(d, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         const len0 = WASM_VECTOR_LEN;

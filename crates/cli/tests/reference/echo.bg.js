@@ -10,6 +10,7 @@ export class Foo {
         if (!(jsValue instanceof Foo)) {
             return 0;
         }
+
         return jsValue.__destroy_into_raw();
     }
     __destroy_into_raw() {
@@ -235,7 +236,7 @@ export function echo_option_struct(a) {
         _assertClass(a, Foo);
         ptr0 = a.__destroy_into_raw();
     }
-    const ret = wasm.echo_option_struct(ptr0);
+    const ret = wasm.echo_option_struct(ptr0 ? (ptr0 >>> 0) : 0);
     return ret ? Foo.__wrap(ret) : undefined;
 }
 
@@ -586,8 +587,8 @@ export function echo_option_vec_uninit_u8(a) {
  * @returns {string}
  */
 export function echo_string(a) {
-    let deferred2_0;
-    let deferred2_1;
+    let deferred2_0 = 0;
+    let deferred2_1 = 0;
     try {
         const ptr0 = passStringToWasm0(a, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         const len0 = WASM_VECTOR_LEN;
@@ -607,7 +608,7 @@ export function echo_string(a) {
 export function echo_struct(a) {
     _assertClass(a, Foo);
     var ptr0 = a.__destroy_into_raw();
-    const ret = wasm.echo_struct(ptr0);
+    const ret = wasm.echo_struct((ptr0 >>> 0));
     return Foo.__wrap(ret);
 }
 

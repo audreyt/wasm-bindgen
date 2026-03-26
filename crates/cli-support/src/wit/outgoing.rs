@@ -67,6 +67,9 @@ impl InstructionBuilder<'_, '_> {
             Descriptor::U32 => self.outgoing_i32(AdapterType::U32),
             Descriptor::I64 => self.outgoing_i64(AdapterType::I64),
             Descriptor::U64 => self.outgoing_i64(AdapterType::U64),
+            Descriptor::I64AsF64 | Descriptor::U64AsF64 => {
+                unreachable!("synthetic pointer-sized sentinel descriptors must stay inside Option")
+            }
             Descriptor::I128 => {
                 self.instruction(
                     &[AdapterType::I64, AdapterType::I64],
@@ -349,6 +352,8 @@ impl InstructionBuilder<'_, '_> {
             Descriptor::U16 => self.out_option_sentinel32(AdapterType::U16),
             Descriptor::I32 => self.out_option_sentinel64(AdapterType::S32),
             Descriptor::U32 => self.out_option_sentinel64(AdapterType::U32),
+            Descriptor::I64AsF64 => self.out_option_sentinel64(AdapterType::I64),
+            Descriptor::U64AsF64 => self.out_option_sentinel64(AdapterType::U64),
             Descriptor::I64 => self.option_native(true, ValType::I64),
             Descriptor::U64 => self.option_native(false, ValType::I64),
             Descriptor::F32 => self.out_option_sentinel64(AdapterType::F32),
@@ -460,6 +465,8 @@ impl InstructionBuilder<'_, '_> {
             | Descriptor::F64
             | Descriptor::I64
             | Descriptor::U64
+            | Descriptor::I64AsF64
+            | Descriptor::U64AsF64
             | Descriptor::I128
             | Descriptor::U128
             | Descriptor::Boolean

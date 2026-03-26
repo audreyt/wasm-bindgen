@@ -54,6 +54,7 @@ pub fn execute(
     tmpdir: &Path,
     cli: Cli,
     tests: Tests,
+    uses_memory64: bool,
     module_format: bool,
     benchmark: PathBuf,
 ) -> Result<(), Error> {
@@ -129,7 +130,7 @@ pub fn execute(
         },
         is_bench = cli.bench,
         nocapture = cli.nocapture || cli.bench,
-        args = cli.get_args(&tests),
+        args = cli.get_args(&tests, uses_memory64),
         benchmark = benchmark.display()
     );
 

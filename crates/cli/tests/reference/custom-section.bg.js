@@ -2,8 +2,8 @@
  * @returns {string}
  */
 export function test_function() {
-    let deferred1_0;
-    let deferred1_1;
+    let deferred1_0 = 0;
+    let deferred1_1 = 0;
     try {
         const ret = wasm.test_function();
         deferred1_0 = ret[0];

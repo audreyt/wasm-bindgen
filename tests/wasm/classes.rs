@@ -523,12 +523,15 @@ fn conditional_skip() {
     js_conditional_skip();
 }
 
-#[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
+#[cfg_attr(any(target_arch = "wasm32", target_arch = "wasm64"), wasm_bindgen)]
 pub struct ConditionalBindings {}
 
-#[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
+#[cfg_attr(any(target_arch = "wasm32", target_arch = "wasm64"), wasm_bindgen)]
 impl ConditionalBindings {
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(constructor))]
+    #[cfg_attr(
+        any(target_arch = "wasm32", target_arch = "wasm64"),
+        wasm_bindgen(constructor)
+    )]
     pub fn new() -> ConditionalBindings {
         ConditionalBindings {}
     }

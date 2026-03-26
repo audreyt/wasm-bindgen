@@ -99,7 +99,11 @@ use core::future::Future;
 use core::panic::AssertUnwindSafe;
 use core::pin::Pin;
 use core::task::{self, Poll};
-use js_sys::{Array, Function, Number, Promise, Undefined};
+#[cfg(target_arch = "wasm64")]
+use js_sys::BigInt;
+#[cfg(target_arch = "wasm32")]
+use js_sys::Number;
+use js_sys::{Array, Function, Promise, Undefined};
 pub use wasm_bindgen;
 
 use wasm_bindgen::prelude::*;
@@ -112,6 +116,16 @@ use wasm_bindgen_futures::future_to_promise;
 // Currently the default is 1 because the DOM has a lot of shared state, and
 // conccurrently doing things by default would likely end up in a bad situation.
 const CONCURRENCY: usize = 1;
+
+#[cfg(target_arch = "wasm32")]
+type ContextArg = Number;
+#[cfg(target_arch = "wasm64")]
+type ContextArg = BigInt;
+
+#[cfg(target_arch = "wasm32")]
+type ContextFactory = Function<fn(Number) -> Undefined>;
+#[cfg(target_arch = "wasm64")]
+type ContextFactory = Function<fn(BigInt) -> Undefined>;
 
 pub mod browser;
 
@@ -401,10 +415,10 @@ impl Context {
         // to pass native function pointers around here). Each test will
         // execute one of the `execute_*` tests below which will push a
         // future onto our `remaining` list, which we'll process later.
-        let cx_arg = Number::from(self as *const Context as u32);
+        let cx_arg = context_arg(self);
         for test in tests {
             match test
-                .unchecked_into::<Function<fn(Number) -> Undefined>>()
+                .unchecked_into::<ContextFactory>()
                 .call(&JsValue::null(), (&cx_arg,))
             {
                 Ok(_) => {}
@@ -426,6 +440,16 @@ impl Context {
             Ok(JsValue::from(passed))
         })
     }
+}
+
+#[cfg(target_arch = "wasm32")]
+fn context_arg(cx: &Context) -> ContextArg {
+    Number::from(cx as *const Context as u32)
+}
+
+#[cfg(target_arch = "wasm64")]
+fn context_arg(cx: &Context) -> ContextArg {
+    BigInt::from(cx as *const Context as u64)
 }
 
 crate::scoped_thread_local!(static CURRENT_OUTPUT: RefCell<Output>);

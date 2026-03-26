@@ -14,6 +14,8 @@ pub enum Descriptor {
     U32,
     I64,
     U64,
+    I64AsF64,
+    U64AsF64,
     I128,
     U128,
     F32,

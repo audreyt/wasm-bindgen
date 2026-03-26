@@ -13,8 +13,8 @@ export function result_i32() {
  * @returns {string}
  */
 export function result_string() {
-    let deferred2_0;
-    let deferred2_1;
+    let deferred2_0 = 0;
+    let deferred2_1 = 0;
     try {
         const ret = wasm.result_string();
         var ptr1 = ret[0];

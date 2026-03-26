@@ -92,8 +92,8 @@ if (Symbol.dispose) Counter.prototype[Symbol.dispose] = Counter.prototype.free;
  * @returns {string}
  */
 function concat(a, b) {
-    let deferred3_0;
-    let deferred3_1;
+    let deferred3_0 = 0;
+    let deferred3_1 = 0;
     try {
         const ptr0 = passStringToWasm0(a, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         const len0 = WASM_VECTOR_LEN;
@@ -113,8 +113,8 @@ function concat(a, b) {
  * @returns {string}
  */
 function uppercase(s) {
-    let deferred2_0;
-    let deferred2_1;
+    let deferred2_0 = 0;
+    let deferred2_1 = 0;
     try {
         const ptr0 = passStringToWasm0(s, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         const len0 = WASM_VECTOR_LEN;
@@ -303,8 +303,8 @@ types.http.HttpStatus = HttpStatus;
  * @returns {string}
  */
 function uppercase2(s) {
-    let deferred2_0;
-    let deferred2_1;
+    let deferred2_0 = 0;
+    let deferred2_1 = 0;
     try {
         const ptr0 = passStringToWasm0(s, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         const len0 = WASM_VECTOR_LEN;

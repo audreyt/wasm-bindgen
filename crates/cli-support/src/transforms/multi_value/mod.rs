@@ -181,11 +181,19 @@ fn xform_one(
 
     let ty = module.funcs.get(func).ty();
     let (ty_params, ty_results) = module.types.params_results(ty);
+    let func_name = module
+        .funcs
+        .get(func)
+        .name
+        .as_deref()
+        .unwrap_or("<unnamed>");
 
     if !ty_results.is_empty() {
         anyhow::bail!(
             "can only multi-value transform functions that don't return any \
-             results (since they should be returned on the stack via a pointer)"
+             results (since they should be returned on the stack via a \
+             pointer): `{func_name}` has params {ty_params:?} and results \
+             {ty_results:?}"
         );
     }
 

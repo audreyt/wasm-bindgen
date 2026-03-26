@@ -61,8 +61,8 @@ const Status = Object.freeze({
  * @returns {string}
  */
 function greet() {
-    let deferred1_0;
-    let deferred1_1;
+    let deferred1_0 = 0;
+    let deferred1_1 = 0;
     try {
         const ret = wasm.bar__greet();
         deferred1_0 = ret[0];
@@ -131,8 +131,8 @@ const Status2 = Object.freeze({
  * @returns {string}
  */
 function greet2() {
-    let deferred1_0;
-    let deferred1_1;
+    let deferred1_0 = 0;
+    let deferred1_1 = 0;
     try {
         const ret = wasm.foo__greet();
         deferred1_0 = ret[0];

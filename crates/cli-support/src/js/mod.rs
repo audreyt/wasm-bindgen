@@ -1629,13 +1629,42 @@ if (require('worker_threads').isMainThread) {{
         }
 
         if class.unwrap_needed {
+            let unwrap_null = format!("0{}", self.wasm_bigint_suffix());
+            let unwrap_checks = {
+                let mut checks = String::new();
+                if self.config.generate_reset_state {
+                    checks.push_str(
+                        "\
+                        if (jsValue.__wbg_inst !== undefined && jsValue.__wbg_inst !== __wbg_instance_id) {
+                            throw new Error('Invalid stale object from previous Wasm instance');
+                        }
+                        ",
+                    );
+                }
+                if self.config.debug {
+                    checks.push_str(
+                        "\
+                        if (jsValue.__wbg_ptr == 0) {
+                            throw new Error('Attempt to use a moved value');
+                        }
+                        ",
+                    );
+                }
+                checks
+            };
+            let unwrap_ptr = if self.memory64 {
+                "return BigInt(jsValue.__destroy_into_raw());"
+            } else {
+                "return jsValue.__destroy_into_raw();"
+            };
             dst.push_str(&format!(
                 "\
                 static __unwrap(jsValue) {{
                     if (!(jsValue instanceof {identifier})) {{
-                        return 0;
+                        return {unwrap_null};
                     }}
-                    return jsValue.__destroy_into_raw();
+                    {unwrap_checks}
+                    {unwrap_ptr}
                 }}
                 ",
             ));
@@ -1646,11 +1675,11 @@ if (require('worker_threads').isMainThread) {{
             if self.config.generate_reset_state {
                 format!(
                     "({{ ptr, instance }}) => {{
-                    if (instance === __wbg_instance_id) wasm.{free_fn}(BigInt(ptr), 1n);
+                    if (instance === __wbg_instance_id) wasm.{free_fn}(BigInt(ptr), 1);
                 }}"
                 )
             } else {
-                format!("ptr => wasm.{free_fn}(BigInt(ptr), 1n)")
+                format!("ptr => wasm.{free_fn}(BigInt(ptr), 1)")
             }
         } else if self.config.generate_reset_state {
             format!(
@@ -1725,7 +1754,7 @@ if (require('worker_threads').isMainThread) {{
         }
 
         let mut free = if self.memory64 {
-            format!("wasm.{free_fn}(BigInt(ptr), 0n)")
+            format!("wasm.{free_fn}(BigInt(ptr), 0)")
         } else {
             format!("wasm.{free_fn}(ptr, 0)")
         };
@@ -3235,12 +3264,21 @@ if (require('worker_threads').isMainThread) {{
     }
 
     fn expose_assert_non_null(&mut self) {
-        self.intrinsic("assert_non_null".into(), "_assertNonNull".into(), {
+        let body = if self.memory64 {
+            "
+            function _assertNonNull(n) {
+                if (typeof(n) !== 'bigint' || n === 0n) throw new Error(`expected a bigint argument that is not 0, found ${n}`);
+            }
+            "
+        } else {
             "
             function _assertNonNull(n) {
                 if (typeof(n) !== 'number' || n === 0) throw new Error(`expected a number argument that is not 0, found ${n}`);
             }
-            ".into()
+            "
+        };
+        self.intrinsic("assert_non_null".into(), "_assertNonNull".into(), {
+            body.into()
         });
     }
 
@@ -3256,6 +3294,7 @@ if (require('worker_threads').isMainThread) {{
 
     fn expose_make_mut_closure(&mut self) {
         let destroy_state = self.expose_closure_finalization();
+        let zero = format!("0{}", self.wasm_bigint_suffix());
 
         if matches!(self.config.mode, OutputMode::Emscripten) {
             self.emscripten_global_deps
@@ -3290,7 +3329,7 @@ if (require('worker_threads').isMainThread) {{
                         // be deallocated while we're invoking it.
                         state.cnt++;
                         const a = state.a;
-                        state.a = 0;
+                        state.a = {zero};
                         try {{
                             return f(a, state.b, ...args);
                         }} finally {{
@@ -3301,7 +3340,7 @@ if (require('worker_threads').isMainThread) {{
                     real._wbg_cb_unref = () => {{
                         if (--state.cnt === 0) {{
                             {destroy_state};
-                            state.a = 0;
+                            state.a = {zero};
                             CLOSURE_DTORS.unregister(state);
                         }}
                     }};
@@ -3328,6 +3367,7 @@ if (require('worker_threads').isMainThread) {{
 
     fn expose_make_closure(&mut self) {
         let destroy_state = self.expose_closure_finalization();
+        let zero = format!("0{}", self.wasm_bigint_suffix());
 
         if matches!(self.config.mode, OutputMode::Emscripten) {
             self.emscripten_global_deps
@@ -3370,7 +3410,7 @@ if (require('worker_threads').isMainThread) {{
                     real._wbg_cb_unref = () => {{
                         if (--state.cnt === 0) {{
                             {destroy_state};
-                            state.a = 0;
+                            state.a = {zero};
                             CLOSURE_DTORS.unregister(state);
                         }}
                     }};

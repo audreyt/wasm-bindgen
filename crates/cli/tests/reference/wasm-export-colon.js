@@ -158,8 +158,8 @@ export function __wbgtest_cov_dump() {
  * @returns {string}
  */
 export function __wbgtest_coverage_path(env, pid, temp_dir, module_signature) {
-    let deferred3_0;
-    let deferred3_1;
+    let deferred3_0 = 0;
+    let deferred3_1 = 0;
     try {
         var ptr0 = isLikeNone(env) ? 0 : passStringToWasm0(env, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         var len0 = WASM_VECTOR_LEN;

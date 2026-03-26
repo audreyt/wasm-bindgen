@@ -156,7 +156,7 @@ export function use_hidden_enum(hidden) {
 export function use_hidden_struct(hidden) {
     _assertClass(hidden, HiddenStruct);
     var ptr0 = hidden.__destroy_into_raw();
-    const ret = wasm.use_hidden_struct(ptr0);
+    const ret = wasm.use_hidden_struct((ptr0 >>> 0));
     return ret;
 }
 export function __wbg___wbindgen_throw_6ddd609b62940d55(arg0, arg1) {

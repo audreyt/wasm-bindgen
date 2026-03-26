@@ -669,6 +669,16 @@ impl<'a, 'b> JsBuilder<'a, 'b> {
         format!("({}{})", self.cx.to_number(val), self.cx.ptr_coerce())
     }
 
+    /// Coerce a wasm value to a pointer-sized JS value for the public API.
+    /// For wasm32 this is an unsigned JS number; for wasm64 it is a BigInt.
+    pub fn coerce_raw_ptr(&self, val: &str) -> String {
+        if self.cx.memory64 {
+            format!("BigInt({val})")
+        } else {
+            format!("({val} >>> 0)")
+        }
+    }
+
     /// Format a pointer-sized literal for the target ABI.
     pub fn size_literal(&self, size: usize) -> String {
         format!("{size}{}", self.cx.wasm_bigint_suffix())
@@ -887,6 +897,7 @@ fn instruction(
             let mut args = Vec::new();
             let tmp = js.tmp();
             if invoc.defer() {
+                let deferred_init = format!("0{}", js.cx.wasm_bigint_suffix());
                 if let Instruction::DeferFree { .. } = instr {
                     // Ignore `free`'s final `align` argument, since that's manually inserted later.
                     params -= 1;
@@ -896,7 +907,7 @@ fn instruction(
                 // outside of the try-finally block and then set those to the args.
                 for (i, arg) in js.stack[js.stack.len() - params..].iter().enumerate() {
                     let name = format!("deferred{tmp}_{i}");
-                    writeln!(js.pre_try, "let {name};").unwrap();
+                    writeln!(js.pre_try, "let {name} = {deferred_init};").unwrap();
                     writeln!(js.prelude, "{name} = {arg};").unwrap();
                     args.push(name);
                 }
@@ -1169,14 +1180,14 @@ fn instruction(
             js.assert_not_moved(&val);
             let i = js.tmp();
             js.prelude(&format!("var ptr{i} = {val}.__destroy_into_raw();"));
-            js.push(format!("ptr{i}"));
+            js.push(js.coerce_raw_ptr(&format!("ptr{i}")));
         }
 
         Instruction::I32FromExternrefRustBorrow { class } => {
             let val = js.pop();
             js.assert_class(&val, class);
             js.assert_not_moved(&val);
-            js.push(format!("{val}.__wbg_ptr"));
+            js.push(js.coerce_raw_ptr(&format!("{val}.__wbg_ptr")));
         }
 
         Instruction::I32FromOptionRust { class } => {
@@ -1189,7 +1200,11 @@ fn instruction(
             js.assert_not_moved(&val);
             js.prelude(&format!("ptr{i} = {val}.__destroy_into_raw();"));
             js.prelude("}");
-            js.push(format!("ptr{i}"));
+            js.push(format!(
+                "ptr{i} ? {} : 0{}",
+                js.coerce_raw_ptr(&format!("ptr{i}")),
+                js.cx.wasm_bigint_suffix()
+            ));
         }
 
         Instruction::I32FromOptionExternref { table_and_alloc } => {
@@ -1266,6 +1281,14 @@ fn instruction(
             let op = if *signed { ">>" } else { ">>>" };
             js.push(format!(
                 "isLikeNone({val}) ? {F64_OPTION_SENTINEL} : ({val}) {op} 0"
+            ));
+        }
+        Instruction::F64FromOptionSentinelNumber => {
+            let val = js.pop();
+            js.cx.expose_is_like_none();
+            js.assert_optional_number(&val);
+            js.push(format!(
+                "isLikeNone({val}) ? {F64_OPTION_SENTINEL} : Number({val})"
             ));
         }
         Instruction::F64FromOptionSentinelF32 => {
@@ -1557,6 +1580,7 @@ fn instruction(
             } else {
                 // Borrowed closure without destructor
                 let i = js.tmp();
+                let zero = format!("0{}", js.cx.wasm_bigint_suffix());
                 js.prelude(&format!("var state{i} = {{a: {a}, b: {b}}};"));
                 let args = (0..*nargs)
                     .map(|i| format!("arg{i}"))
@@ -1569,7 +1593,7 @@ fn instruction(
                     js.prelude(&format!(
                         "var cb{i} = ({args}) => {{
                             const a = state{i}.a;
-                            state{i}.a = 0;
+                            state{i}.a = {zero};
                             try {{
                                 return {wrapper}(a, state{i}.b, {args});
                             }} finally {{
@@ -1592,13 +1616,13 @@ fn instruction(
                         // ensure that any lingering references to the closure
                         // will fail immediately due to null pointers passed in
                         // to Rust.
-                        js.finally(&format!("state{i}.a = 0;"));
+                        js.finally(&format!("state{i}.a = {zero};"));
                     }
                     ClosureDtor::Borrowed => {
                         // Borrowed closure from ScopedClosure::borrow/borrow_mut. Add
                         // _wbg_cb_unref to invalidate the closure at the end of
                         // the scoped block.
-                        js.prelude(&format!("cb{i}._wbg_cb_unref = () => state{i}.a = 0;"));
+                        js.prelude(&format!("cb{i}._wbg_cb_unref = () => state{i}.a = {zero};"));
                     }
                 }
                 js.push(format!("cb{i}"));
@@ -1707,19 +1731,24 @@ fn instruction(
         Instruction::I32FromNonNull => {
             let val = js.pop();
             js.assert_non_null(&val);
-            js.push(val);
+            js.push(js.coerce_raw_ptr(&val));
         }
 
         Instruction::I32FromOptionNonNull => {
             let val = js.pop();
             js.cx.expose_is_like_none();
-            js.assert_optional_number(&val);
-            js.push(format!("isLikeNone({val}) ? 0 : {val}"));
+            if js.cx.memory64 {
+                js.assert_optional_bigint(&val);
+                js.push(format!("isLikeNone({val}) ? 0n : BigInt({val})"));
+            } else {
+                js.assert_optional_number(&val);
+                js.push(format!("isLikeNone({val}) ? 0 : {val}"));
+            }
         }
 
         Instruction::OptionNonNullFromI32 => {
             let val = js.pop();
-            let coerced = js.coerce_ptr(&val);
+            let coerced = js.coerce_raw_ptr(&val);
             js.push(format!("{val} ? {coerced} : undefined"));
         }
     }

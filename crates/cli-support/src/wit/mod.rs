@@ -1263,10 +1263,16 @@ impl<'a> Context<'a> {
         };
         self.aux.structs.push(aux);
 
+        let ptr_desc = if self.memory64() {
+            Descriptor::I64
+        } else {
+            Descriptor::I32
+        };
+
         let wrap_constructor = wasm_bindgen_shared::new_function(&qualified_name);
         self.add_aux_import_to_import_map(
             &wrap_constructor,
-            vec![Descriptor::I32],
+            vec![ptr_desc.clone()],
             Descriptor::Externref,
             AuxImport::WrapInExportedClass(rust_name.to_string()),
         )?;
@@ -1275,7 +1281,7 @@ impl<'a> Context<'a> {
         self.add_aux_import_to_import_map(
             &unwrap_fn,
             vec![Descriptor::Ref(Box::new(Descriptor::Externref))],
-            Descriptor::I32,
+            ptr_desc,
             AuxImport::UnwrapExportedClass(rust_name.to_string()),
         )?;
 
@@ -1456,7 +1462,7 @@ impl<'a> Context<'a> {
     fn import_adapter(
         &mut self,
         import: ImportId,
-        signature: Function,
+        mut signature: Function,
         kind: AdapterJsImportKind,
     ) -> Result<AdapterId, Error> {
         let import = self.module.imports.get(import);
@@ -1466,6 +1472,7 @@ impl<'a> Context<'a> {
             walrus::ImportKind::Function(f) => f,
             _ => bail!("bound import must be assigned to function"),
         };
+        self.normalize_pointer_sized_option_signature(&mut signature, core_id);
 
         // Process the returned type first to see if it needs an out-pointer. This
         // happens if the results of the incoming arguments translated to Wasm take
@@ -1543,7 +1550,7 @@ impl<'a> Context<'a> {
     fn export_adapter(
         &mut self,
         mut export: ExportId,
-        signature: Function,
+        mut signature: Function,
     ) -> Result<AdapterId, Error> {
         // Same export might be requested multiple times due to codegen-units,
         // or because wasm-ld ICF merged invoke functions for different closure
@@ -1577,6 +1584,12 @@ impl<'a> Context<'a> {
                 export = self.module.exports.add(&name, func_id);
             }
         }
+
+        let core_id = match self.module.exports.get(export).item {
+            walrus::ExportItem::Function(f) => f,
+            _ => bail!("bound export must be assigned to function"),
+        };
+        self.normalize_pointer_sized_option_signature(&mut signature, core_id);
 
         // Figure out how to translate all the incoming arguments ...
         let mut args = self.instruction_builder(false);
@@ -1662,6 +1675,46 @@ impl<'a> Context<'a> {
         self.export_adapter_sigs.insert(id, sig_key);
 
         Ok(id)
+    }
+
+    fn normalize_pointer_sized_option_signature(
+        &self,
+        signature: &mut Function,
+        core_id: FunctionId,
+    ) {
+        if !self.memory64() {
+            return;
+        }
+
+        let ty = self.module.funcs.get(core_id).ty();
+        let (params, results) = self.module.types.params_results(ty);
+
+        for (descriptor, wasm) in signature.arguments.iter_mut().zip(params.iter().copied()) {
+            Self::normalize_pointer_sized_option_descriptor(descriptor, wasm);
+        }
+
+        if let [result] = results {
+            Self::normalize_pointer_sized_option_descriptor(&mut signature.ret, *result);
+        }
+    }
+
+    fn normalize_pointer_sized_option_descriptor(
+        descriptor: &mut Descriptor,
+        wasm: walrus::ValType,
+    ) {
+        if wasm != walrus::ValType::F64 {
+            return;
+        }
+
+        let Descriptor::Option(inner) = descriptor else {
+            return;
+        };
+
+        match inner.as_mut() {
+            Descriptor::I64 => **inner = Descriptor::I64AsF64,
+            Descriptor::U64 => **inner = Descriptor::U64AsF64,
+            _ => {}
+        }
     }
 
     fn instruction_builder<'b>(&'b mut self, return_position: bool) -> InstructionBuilder<'b, 'a> {

@@ -1,6 +1,22 @@
 const assert = require('assert');
 const wasm = require('wasm-bindgen-test');
 
+const isWasm64 = () => typeof wasm.wasm64_return_usize === 'function';
+
+const pointerIndex = (ptr, stride) =>
+  isWasm64() ? Number(ptr / BigInt(stride)) : ptr / stride;
+
+const optionRawPointerArg = ptr =>
+  isWasm64() ? Number(ptr) : ptr;
+
+const nonNullZero = () =>
+  isWasm64() ? 0n : 0;
+
+const nonNullTypeError = () =>
+  isWasm64()
+    ? /expected a bigint argument that is not 0/
+    : /expected a number argument that is not 0/;
+
 exports.test_add = function() {
   assert.strictEqual(wasm.simple_add(1, 2), 3);
   assert.strictEqual(wasm.simple_add(2, 3), 5);
@@ -116,33 +132,33 @@ exports.test_raw_pointers = function() {
   const memory8 = new Uint8Array(wasm.__wasm.memory.buffer);
 
   const ptr1 = wasm.simple_return_raw_pointer_u32(4294967295);
-  assert.strictEqual(memory32[ptr1 / 4], 4294967295);
+  assert.strictEqual(memory32[pointerIndex(ptr1, 4)], 4294967295);
   const ptr2 = wasm.simple_return_raw_pointer_u8(42);
-  assert.strictEqual(memory8[ptr2], 42);
+  assert.strictEqual(memory8[pointerIndex(ptr2, 1)], 42);
 
   wasm.simple_raw_pointers_work(ptr1, ptr2);
-  assert.strictEqual(memory32[ptr1 / 4], 42);
+  assert.strictEqual(memory32[pointerIndex(ptr1, 4)], 42);
   
   const ptr3 = wasm.simple_return_raw_pointer_u32(4294967295);
-  wasm.simple_option_raw_pointers_work(ptr3, ptr2);
-  assert.strictEqual(memory32[ptr3 / 4], 42);
+  wasm.simple_option_raw_pointers_work(optionRawPointerArg(ptr3), optionRawPointerArg(ptr2));
+  assert.strictEqual(memory32[pointerIndex(ptr3, 4)], 42);
 
-  assert.strictEqual(wasm.simple_option_raw_pointers_work(0, ptr2), undefined);
-  assert.strictEqual(wasm.simple_option_raw_pointers_work(null, ptr2), undefined);
-  assert.strictEqual(wasm.simple_option_raw_pointers_work(undefined, ptr2), undefined);
+  assert.strictEqual(wasm.simple_option_raw_pointers_work(0, optionRawPointerArg(ptr2)), undefined);
+  assert.strictEqual(wasm.simple_option_raw_pointers_work(null, optionRawPointerArg(ptr2)), undefined);
+  assert.strictEqual(wasm.simple_option_raw_pointers_work(undefined, optionRawPointerArg(ptr2)), undefined);
 
-  assert.strictEqual(wasm.simple_option_raw_pointers_work(ptr1, 0), undefined);
-  assert.strictEqual(wasm.simple_option_raw_pointers_work(ptr1, null), undefined);
-  assert.strictEqual(wasm.simple_option_raw_pointers_work(ptr1, undefined), undefined);
+  assert.strictEqual(wasm.simple_option_raw_pointers_work(optionRawPointerArg(ptr1), 0), undefined);
+  assert.strictEqual(wasm.simple_option_raw_pointers_work(optionRawPointerArg(ptr1), null), undefined);
+  assert.strictEqual(wasm.simple_option_raw_pointers_work(optionRawPointerArg(ptr1), undefined), undefined);
 
   assert.strictEqual(wasm.simple_return_option_null_pointer(), 0)
 };
 
 exports.test_non_null = function() {
   assert.strictEqual(wasm.simple_nonnull_work(wasm.simple_return_non_null()), 42);
-  assert.throws(() => wasm.simple_nonnull_work(0), /expected a number argument that is not 0/);
+  assert.throws(() => wasm.simple_nonnull_work(nonNullZero()), nonNullTypeError());
 
-  assert.strictEqual(wasm.simple_option_nonnull_work(0), undefined);
+  assert.strictEqual(wasm.simple_option_nonnull_work(nonNullZero()), undefined);
   assert.strictEqual(wasm.simple_option_nonnull_work(null), undefined);
   assert.strictEqual(wasm.simple_option_nonnull_work(undefined), undefined);
 
