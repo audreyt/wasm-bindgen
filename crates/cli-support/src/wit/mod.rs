@@ -1704,13 +1704,12 @@ impl<'a> Context<'a> {
             return;
         }
 
-        match descriptor {
-            Descriptor::Option(inner) => match inner.as_mut() {
+        if let Descriptor::Option(inner) = descriptor {
+            match inner.as_mut() {
                 Descriptor::I64 => **inner = Descriptor::I64AsF64,
                 Descriptor::U64 => **inner = Descriptor::U64AsF64,
                 _ => {}
-            },
-            _ => {}
+            }
         }
     }
 
