@@ -1685,12 +1685,53 @@ impl<'a> Context<'a> {
         let ty = self.module.funcs.get(core_id).ty();
         let (params, results) = self.module.types.params_results(ty);
 
-        for (descriptor, wasm) in signature.arguments.iter_mut().zip(params.iter().copied()) {
-            Self::normalize_memory64_descriptor(descriptor, wasm);
+        let mut param_idx = 0;
+        for descriptor in &mut signature.arguments {
+            if let Some(consumed) =
+                Self::normalize_memory64_native_option_descriptor(descriptor, &params[param_idx..])
+            {
+                param_idx += consumed;
+                continue;
+            }
+
+            if let Some(wasm) = params.get(param_idx).copied() {
+                Self::normalize_memory64_descriptor(descriptor, wasm);
+            }
+            param_idx += Self::descriptor_wasm_arity(descriptor);
+        }
+
+        if Self::normalize_memory64_native_option_descriptor(&mut signature.ret, results).is_some()
+        {
+            return;
         }
 
         if let [result] = results {
             Self::normalize_memory64_descriptor(&mut signature.ret, *result);
+        }
+    }
+
+    fn normalize_memory64_native_option_descriptor(
+        descriptor: &mut Descriptor,
+        wasm: &[walrus::ValType],
+    ) -> Option<usize> {
+        let [walrus::ValType::I32, walrus::ValType::F64, ..] = wasm else {
+            return None;
+        };
+
+        let Descriptor::Option(inner) = descriptor else {
+            return None;
+        };
+
+        match inner.as_mut() {
+            Descriptor::I64AsF64 => {
+                **inner = Descriptor::I64;
+                Some(2)
+            }
+            Descriptor::U64AsF64 => {
+                **inner = Descriptor::U64;
+                Some(2)
+            }
+            _ => None,
         }
     }
 
@@ -1708,6 +1749,89 @@ impl<'a> Context<'a> {
                 _ => {}
             },
             _ => {}
+        }
+    }
+
+    fn descriptor_wasm_arity(descriptor: &Descriptor) -> usize {
+        match descriptor {
+            Descriptor::Unit => 0,
+            Descriptor::I8
+            | Descriptor::U8
+            | Descriptor::ClampedU8
+            | Descriptor::I16
+            | Descriptor::U16
+            | Descriptor::I32
+            | Descriptor::U32
+            | Descriptor::I64
+            | Descriptor::U64
+            | Descriptor::I64AsF64
+            | Descriptor::U64AsF64
+            | Descriptor::F32
+            | Descriptor::F64
+            | Descriptor::Boolean
+            | Descriptor::Externref
+            | Descriptor::NamedExternref(_)
+            | Descriptor::Enum { .. }
+            | Descriptor::StringEnum { .. }
+            | Descriptor::RustStruct(_)
+            | Descriptor::Char
+            | Descriptor::NonNull => 1,
+            Descriptor::Function(_) | Descriptor::Closure(_) => 2,
+            Descriptor::I128 | Descriptor::U128 => 2,
+            Descriptor::String
+            | Descriptor::CachedString
+            | Descriptor::Slice(_)
+            | Descriptor::Vector(_) => 2,
+            Descriptor::Ref(inner) => match inner.as_ref() {
+                Descriptor::String | Descriptor::CachedString | Descriptor::Slice(_) => 2,
+                Descriptor::Function(_) | Descriptor::Closure(_) => 2,
+                _ => 1,
+            },
+            Descriptor::RefMut(inner) => match inner.as_ref() {
+                Descriptor::Slice(_) => 3,
+                Descriptor::Function(_) | Descriptor::Closure(_) => 2,
+                _ => 1,
+            },
+            Descriptor::Option(inner) => match inner.as_ref() {
+                Descriptor::I8
+                | Descriptor::U8
+                | Descriptor::ClampedU8
+                | Descriptor::I16
+                | Descriptor::U16
+                | Descriptor::I32
+                | Descriptor::U32
+                | Descriptor::I64AsF64
+                | Descriptor::U64AsF64
+                | Descriptor::F32
+                | Descriptor::Boolean
+                | Descriptor::Char
+                | Descriptor::Enum { .. }
+                | Descriptor::StringEnum { .. }
+                | Descriptor::RustStruct(_)
+                | Descriptor::Externref
+                | Descriptor::NamedExternref(_)
+                | Descriptor::NonNull => 1,
+                Descriptor::I64 | Descriptor::U64 | Descriptor::F64 => 2,
+                Descriptor::I128 | Descriptor::U128 => 3,
+                Descriptor::String
+                | Descriptor::CachedString
+                | Descriptor::Slice(_)
+                | Descriptor::Vector(_) => 2,
+                Descriptor::Ref(inner) => match inner.as_ref() {
+                    Descriptor::Slice(_) | Descriptor::String | Descriptor::CachedString => 2,
+                    _ => 1,
+                },
+                Descriptor::RefMut(inner) => match inner.as_ref() {
+                    Descriptor::Slice(_) => 3,
+                    _ => 1,
+                },
+                Descriptor::Function(_)
+                | Descriptor::Closure(_)
+                | Descriptor::Option(_)
+                | Descriptor::Result(_) => 1,
+                Descriptor::Unit => 0,
+            },
+            Descriptor::Result(_) => 1,
         }
     }
 
@@ -2012,4 +2136,30 @@ fn test_struct_packer() {
     assert_eq!(read_ty(double), 2); // f64, already aligned
     assert_eq!(read_ty(i32___), 4); // u32, already aligned
     assert_eq!(read_ty(double), 6); // f64, NOT already aligned, skips up to offset 6
+}
+
+#[test]
+fn normalize_memory64_keeps_native_optional_pointer_abi() {
+    let mut descriptor = Descriptor::Option(Box::new(Descriptor::U64AsF64));
+    assert_eq!(
+        Context::normalize_memory64_native_option_descriptor(
+            &mut descriptor,
+            &[walrus::ValType::I32, walrus::ValType::F64],
+        ),
+        Some(2)
+    );
+    assert_eq!(descriptor, Descriptor::Option(Box::new(Descriptor::U64)));
+}
+
+#[test]
+fn normalize_memory64_leaves_sentinel_optional_usize_alone() {
+    let mut descriptor = Descriptor::Option(Box::new(Descriptor::U64AsF64));
+    assert_eq!(
+        Context::normalize_memory64_native_option_descriptor(
+            &mut descriptor,
+            &[walrus::ValType::F64],
+        ),
+        None
+    );
+    assert_eq!(descriptor, Descriptor::Option(Box::new(Descriptor::U64AsF64)));
 }
