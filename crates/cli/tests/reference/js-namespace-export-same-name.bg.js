@@ -15,7 +15,7 @@ class Point {
      */
     constructor(x, y) {
         const ret = wasm.barpoint_new(x, y);
-        this.__wbg_ptr = (ret >>> 0);
+        this.__wbg_ptr = ret >>> 0;
         PointFinalization.register(this, this.__wbg_ptr, this);
         return this;
     }
@@ -97,7 +97,7 @@ class Point2 {
      */
     constructor(x) {
         const ret = wasm.foopoint_new(x);
-        this.__wbg_ptr = (ret >>> 0);
+        this.__wbg_ptr = ret >>> 0;
         Point2Finalization.register(this, this.__wbg_ptr, this);
         return this;
     }
@@ -147,7 +147,7 @@ export const foo = {};
 foo.Point = Point2;
 foo.Status = Status2;
 foo.greet = greet2;
-export function __wbg___wbindgen_throw_6ddd609b62940d55(arg0, arg1) {
+export function __wbg___wbindgen_throw_81fc77679af83bc6(arg0, arg1) {
     throw new Error(getStringFromWasm0(arg0, arg1));
 }
 export function __wbindgen_init_externref_table() {

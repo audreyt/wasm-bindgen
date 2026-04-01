@@ -453,7 +453,10 @@ where
         let (ptr, len): (usize, usize) = unsafe { mem::transmute_copy(&t) };
         ScopedClosure {
             js: crate::__rt::wbg_cast(BorrowedClosure::<T, UNWIND_SAFE> {
-                data: WasmSlice { ptr, len },
+                data: WasmClosureSlice {
+                    a: crate::__rt::WasmWord::from_usize(ptr),
+                    b: crate::__rt::WasmWord::from_usize(len),
+                },
                 _marker: PhantomData,
             }),
             _marker: PhantomData,
@@ -532,7 +535,10 @@ where
         let (ptr, len): (usize, usize) = unsafe { mem::transmute_copy(&t) };
         ScopedClosure {
             js: crate::__rt::wbg_cast(BorrowedClosure::<T, UNWIND_SAFE> {
-                data: WasmSlice { ptr, len },
+                data: WasmClosureSlice {
+                    a: crate::__rt::WasmWord::from_usize(ptr),
+                    b: crate::__rt::WasmWord::from_usize(len),
+                },
                 _marker: PhantomData,
             }),
             _marker: PhantomData,
@@ -730,10 +736,38 @@ impl<T: ?Sized> AsRef<JsValue> for ScopedClosure<'_, T> {
 #[repr(transparent)]
 struct OwnedClosure<T: ?Sized, const UNWIND_SAFE: bool>(Box<T>);
 
+#[repr(C)]
+#[derive(Clone, Copy)]
+#[doc(hidden)]
+pub struct WasmClosureSlice {
+    pub a: crate::__rt::WasmWord,
+    pub b: crate::__rt::WasmWord,
+}
+
+impl crate::convert::WasmAbi for WasmClosureSlice {
+    type Prim1 = <crate::__rt::WasmWord as crate::convert::WasmAbi>::Prim1;
+    type Prim2 = <crate::__rt::WasmWord as crate::convert::WasmAbi>::Prim1;
+    type Prim3 = ();
+    type Prim4 = ();
+
+    #[inline]
+    fn split(self) -> (Self::Prim1, Self::Prim2, (), ()) {
+        (self.a.split().0, self.b.split().0, (), ())
+    }
+
+    #[inline]
+    fn join(a: Self::Prim1, b: Self::Prim2, _: (), _: ()) -> Self {
+        Self {
+            a: crate::__rt::WasmWord::join(a, (), (), ()),
+            b: crate::__rt::WasmWord::join(b, (), (), ()),
+        }
+    }
+}
+
 /// Internal representation of a borrowed closure sent to JS.
 /// `UNWIND_SAFE` selects the invoke shim: `true` catches panics, `false` does not.
 struct BorrowedClosure<T: ?Sized, const UNWIND_SAFE: bool> {
-    data: WasmSlice,
+    data: WasmClosureSlice,
     _marker: PhantomData<T>,
 }
 
@@ -746,8 +780,11 @@ struct BorrowedClosure<T: ?Sized, const UNWIND_SAFE: bool> {
 /// `Box<dyn FnOnce/FnMut/Fn>` closure, or `a` must be zero (in which case this
 /// is a no-op).
 #[no_mangle]
-pub unsafe extern "C" fn __wbindgen_destroy_closure(a: usize, b: usize) {
-    if a == 0 {
+pub unsafe extern "C" fn __wbindgen_destroy_closure(
+    a: crate::__rt::WasmWord,
+    b: crate::__rt::WasmWord,
+) {
+    if a.is_zero() {
         return;
     }
 
@@ -759,7 +796,7 @@ pub unsafe extern "C" fn __wbindgen_destroy_closure(a: usize, b: usize) {
     trait ErasedPlaceholderForDrop {}
 
     drop(mem::transmute_copy::<_, Box<dyn ErasedPlaceholderForDrop>>(
-        &(a, b),
+        &(a.into_usize(), b.into_usize()),
     ));
 }
 
@@ -793,11 +830,14 @@ impl<T, const UNWIND_SAFE: bool> IntoWasmAbi for OwnedClosure<T, UNWIND_SAFE>
 where
     T: WasmClosure + ?Sized,
 {
-    type Abi = WasmSlice;
+    type Abi = WasmClosureSlice;
 
-    fn into_abi(self) -> WasmSlice {
+    fn into_abi(self) -> WasmClosureSlice {
         let (a, b): (usize, usize) = unsafe { mem::transmute_copy(&ManuallyDrop::new(self)) };
-        WasmSlice { ptr: a, len: b }
+        WasmClosureSlice {
+            a: crate::__rt::WasmWord::from_usize(a),
+            b: crate::__rt::WasmWord::from_usize(b),
+        }
     }
 }
 
@@ -805,8 +845,8 @@ impl<T, const UNWIND_SAFE: bool> IntoWasmAbi for BorrowedClosure<T, UNWIND_SAFE>
 where
     T: WasmClosure + ?Sized,
 {
-    type Abi = WasmSlice;
-    fn into_abi(self) -> WasmSlice {
+    type Abi = WasmClosureSlice;
+    fn into_abi(self) -> WasmClosureSlice {
         self.data
     }
 }

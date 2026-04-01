@@ -305,15 +305,6 @@ impl<'a> Context<'a> {
         }
     }
 
-    /// Wraps an expression with `Number()` for memory64 (BigInt→Number conversion).
-    fn to_number(&self, expr: &str) -> String {
-        if self.memory64 {
-            format!("Number({expr})")
-        } else {
-            expr.to_string()
-        }
-    }
-
     /// Wraps an expression with `BigInt()` for memory64.
     fn to_wasm_bigint(&self, expr: &str) -> String {
         if self.memory64 {
@@ -328,41 +319,50 @@ impl<'a> Context<'a> {
         if self.memory64 {
             format!("BigInt({expr})")
         } else {
-            format!("({expr} >>> 0)")
+            format!("{expr} >>> 0")
         }
     }
 
-    /// Coerce a JS pointer-sized expression into inline Wasm ABI syntax.
-    fn to_wasm_ptr_inline(&self, expr: &str) -> String {
+    /// Inline form of `to_js_ptr` for standalone assignments and initializers.
+    fn to_js_ptr_inline(&self, expr: &str) -> String {
         if self.memory64 {
-            format!("BigInt({expr})")
+            format!("Number({expr})")
         } else {
             format!("{expr} >>> 0")
         }
     }
 
-    /// Returns `""` for memory64 (values are already BigInt), `" >>> 0"` for wasm32.
-    fn ptr_coerce(&self) -> &str {
+    /// Coerce an internal Rust-owned pointer value into the core Wasm ABI.
+    /// These shims stay numeric on wasm64 but still normalize to `u32` on wasm32.
+    fn to_internal_wasm_ptr(&self, expr: &str) -> String {
         if self.memory64 {
-            ""
+            expr.to_string()
         } else {
-            " >>> 0"
+            format!("({expr} >>> 0)")
         }
     }
 
-    /// Coerce a wasm pointer-sized expression to an unsigned JS pointer expression.
-    fn coerce_ptr_expr(&self, expr: &str) -> String {
-        format!("{}{}", self.to_number(expr), self.ptr_coerce())
+    /// Inline form of `to_internal_wasm_ptr`.
+    fn to_internal_wasm_ptr_inline(&self, expr: &str) -> String {
+        if self.memory64 {
+            expr.to_string()
+        } else {
+            format!("{expr} >>> 0")
+        }
     }
 
     /// Coerce a wasm pointer-sized value to an unsigned JS pointer.
     fn to_js_ptr(&self, expr: &str) -> String {
-        format!("({})", self.coerce_ptr_expr(expr))
+        if self.memory64 {
+            format!("Number({expr})")
+        } else {
+            format!("({expr} >>> 0)")
+        }
     }
 
     /// Normalizes a Wasm pointer parameter for JS use.
     fn wasm_ptr_fixup_stmt(&self, ptr: &str) -> String {
-        format!("{ptr} = {};", self.coerce_ptr_expr(ptr))
+        format!("{ptr} = {};", self.to_js_ptr_inline(ptr))
     }
 
     /// Normalizes a Wasm slice pointer/length pair for JS use.
@@ -385,19 +385,28 @@ impl<'a> Context<'a> {
 
     /// Formats a pointer-sized literal for the current target ABI.
     fn usize_literal(&self, value: usize) -> String {
-        format!("{value}{}", self.wasm_bigint_suffix())
+        if self.memory64 {
+            format!("{value}n")
+        } else {
+            value.to_string()
+        }
+    }
+
+    /// Formats a JS number literal for internal pointer-word shims.
+    fn internal_word_literal(&self, value: usize) -> String {
+        value.to_string()
     }
 
     /// Coerces the stack pointer shim result into a JS pointer.
     fn stack_ptr_result_expr(&self, offset: &str) -> String {
-        self.coerce_ptr_expr(&format!("wasm.__wbindgen_add_to_stack_pointer({offset})"))
+        self.to_js_ptr(&format!("wasm.__wbindgen_add_to_stack_pointer({offset})"))
     }
 
     /// Allocates `size_expr` bytes with `malloc` and returns a JS pointer.
     fn malloc_ptr(&self, size_expr: &str, align: usize) -> String {
         let size = self.to_wasm_bigint(size_expr);
         let align = self.usize_literal(align);
-        self.coerce_ptr_expr(&format!("malloc({size}, {align})"))
+        self.to_js_ptr_inline(&format!("malloc({size}, {align})"))
     }
 
     /// Reallocates `ptr_expr` with `realloc` and returns a JS pointer.
@@ -412,7 +421,7 @@ impl<'a> Context<'a> {
         let old_size = self.to_wasm_bigint(old_size_expr);
         let new_size = self.to_wasm_bigint(new_size_expr);
         let align = self.usize_literal(align);
-        self.coerce_ptr_expr(&format!("realloc({ptr}, {old_size}, {new_size}, {align})"))
+        self.to_js_ptr_inline(&format!("realloc({ptr}, {old_size}, {new_size}, {align})"))
     }
 
     /// Writes an ExportDefinition to global and typescript buffers.
@@ -1684,11 +1693,11 @@ if (require('worker_threads').isMainThread) {{
                 ("obj.__wbg_ptr = ptr;", "obj.__wbg_ptr")
             };
 
-            let ptr_coerce = format!("ptr = {};", self.coerce_ptr_expr("ptr"));
+            let ptr_fixup = format!("ptr = {};", self.to_js_ptr_inline("ptr"));
             dst.push_str(&format!(
                 "\
                 static __wrap(ptr) {{
-                    {ptr_coerce}
+                    {ptr_fixup}
                     const obj = Object.create({identifier}.prototype);
                     {ptr_assignment}
                     {identifier}Finalization.register(obj, {register_data}, obj);
@@ -1737,7 +1746,7 @@ if (require('worker_threads').isMainThread) {{
         }
 
         let free_fn = wasm_bindgen_shared::free_function(qualified);
-        let free_ptr = self.to_wasm_ptr_inline("ptr");
+        let free_ptr = self.to_internal_wasm_ptr_inline("ptr");
         let finalization_callback = if self.config.generate_reset_state {
             format!(
                 "({{ ptr, instance }}) => {{
@@ -1810,7 +1819,7 @@ if (require('worker_threads').isMainThread) {{
             }
         }
 
-        let mut free = format!("wasm.{free_fn}({}, 0)", self.to_wasm_bigint("ptr"));
+        let mut free = format!("wasm.{free_fn}(ptr, 0)");
         free = binding::maybe_wrap_try_catch(&free, self.aux.wrapped_js_tag.is_some());
         dst.push_str(&format!(
             "\
@@ -2926,6 +2935,38 @@ if (require('worker_threads').isMainThread) {{
         self.memview("Float64Array", memory)
     }
 
+    /// Emit a `__wbg_invoke_handler(addr)` JS helper that reads a u32 table
+    /// index from linear memory at `addr` and calls through the Wasm
+    /// indirect-function-table.
+    ///
+    /// Used for both the abort handler and the reinit handler.  No exported
+    /// Wasm function is required — the handler is stored as a plain `u32`
+    /// table index in a `#[no_mangle] static` (exported as a Wasm global),
+    /// so JS can read it directly from linear memory via the global's address.
+    ///
+    /// The indirect-function-table lives entirely outside linear memory, so
+    /// calling through it is safe even when linear memory is corrupt (e.g.
+    /// during a hard abort).  This is the key reason we store handlers as
+    /// table indices rather than heap-allocated closures or fat pointers.
+    fn expose_invoke_handler(&mut self) -> Result<String, Error> {
+        let memory = wasm_conventions::get_memory(self.module)?;
+        let mem_view = self.expose_int32_memory(memory);
+        let table = self.export_function_table()?;
+        self.intrinsic(
+            "invoke_handler".into(),
+            "__wbg_invoke_handler".into(),
+            format!(
+                "\
+                function __wbg_invoke_handler(addr) {{
+                    const idx = {mem_view}()[addr / 4];
+                    if (idx) wasm.{table}.get(idx)();
+                }}"
+            )
+            .into(),
+        );
+        Ok("__wbg_invoke_handler".to_string())
+    }
+
     fn expose_dataview_memory(&mut self, memory: MemoryId) -> MemView {
         self.memview("DataView", memory)
     }
@@ -3295,7 +3336,7 @@ if (require('worker_threads').isMainThread) {{
 
     fn expose_make_mut_closure(&mut self) {
         let destroy_state = self.expose_closure_finalization();
-        let zero = format!("0{}", self.wasm_bigint_suffix());
+        let zero = self.internal_word_literal(0);
 
         if matches!(self.config.mode, OutputMode::Emscripten) {
             self.emscripten_global_deps
@@ -3368,7 +3409,7 @@ if (require('worker_threads').isMainThread) {{
 
     fn expose_make_closure(&mut self) {
         let destroy_state = self.expose_closure_finalization();
-        let zero = format!("0{}", self.wasm_bigint_suffix());
+        let zero = self.internal_word_literal(0);
 
         if matches!(self.config.mode, OutputMode::Emscripten) {
             self.emscripten_global_deps
@@ -3445,11 +3486,7 @@ if (require('worker_threads').isMainThread) {{
             .destroy_closure
             .expect("failed to find `__wbindgen_destroy_closure` intrinsic");
         let dtor = self.export_name_of(func_id);
-        let destroy_state = format!(
-            "wasm.{dtor}({}, {})",
-            self.to_wasm_bigint("state.a"),
-            self.to_wasm_bigint("state.b"),
-        );
+        let destroy_state = format!("wasm.{dtor}(state.a, state.b)");
         self.intrinsic("closure_finalization".into(), "CLOSURE_DTORS".into(), {
             let prevent_stale = if self.config.generate_reset_state {
                 format!(
@@ -3569,14 +3606,23 @@ if (require('worker_threads').isMainThread) {{
             reset_statements.push(heap_reset);
         }
 
-        reset_statements.push(
+        // After creating the new instance, invoke the reinit handler if one
+        // was registered. We use __wbg_invoke_handler which reads the u32
+        // table index from the __reinit_handler global address and calls
+        // through the function table — no exported Wasm function needed.
+        let reinit_call = if let Ok(invoke_handler) = self.expose_invoke_handler() {
+            format!("{invoke_handler}(wasm.__reinit_handler.value);")
+        } else {
+            String::new()
+        };
+        reset_statements.push(format!(
             "
             const wasmInstance = new WebAssembly.Instance(wasmModule, __wbg_get_imports());
             wasm = wasmInstance.exports;
             wasm.__wbindgen_start();
+            {reinit_call}
             "
-            .to_string(),
-        );
+        ));
 
         let function_body = format!("() {{\n{}}}", reset_statements.join("\n"));
 
@@ -3844,7 +3890,7 @@ if (require('worker_threads').isMainThread) {{
         }
 
         self.generate_jstag_import();
-        self.generate_wrapped_jstag_import();
+        self.generate_wrapped_jstag_import()?;
 
         for (id, adapter, kind) in iter_adapter(self.aux, self.wit, self.module) {
             let instrs = match &adapter.kind {
@@ -3937,9 +3983,9 @@ if (require('worker_threads').isMainThread) {{
     }
 
     /// Generate the import for the wrapped JSTag if it was used (abort-reinit mode).
-    fn generate_wrapped_jstag_import(&mut self) {
+    fn generate_wrapped_jstag_import(&mut self) -> Result<(), Error> {
         let Some(wrapped_js_tag) = self.aux.wrapped_js_tag else {
-            return;
+            return Ok(());
         };
 
         // Find the import ID for the wrapped JSTag
@@ -3955,14 +4001,13 @@ if (require('worker_threads').isMainThread) {{
         });
 
         let Some(id) = import_id else {
-            return;
+            return Ok(());
         };
 
         if matches!(self.config.mode, OutputMode::Emscripten) {
             self.emscripten_library.push_str(
                 r#"
 addToLibrary({
-    // THE FIX: Assign it to globalThis inline so JS can see it!
     __wbindgen_wrapped_jstag: "(globalThis.__wbindgen_wrapped_jstag = new WebAssembly.Tag({ parameters: ['externref'] }))",
     
     __wbindgen_wrapped_jstag__postset: `
@@ -3977,7 +4022,7 @@ addToLibrary({
     `
 });
 "#);
-            return;
+            return Ok(());
         }
 
         // Create a top-level constant for the wrapped tag
@@ -4006,13 +4051,19 @@ function __wbg_termination_guard() {{
         ));
 
         // Create a helper function to unwrap and rethrow wrapped JS exceptions
+        let invoke_handler = self.expose_invoke_handler()?;
         self.global(&format!(
             "\
 function __wbg_handle_catch(e) {{
     if (e instanceof WebAssembly.Exception && e.is(__wbindgen_wrapped_jstag)) {{
         throw e.getArg(__wbindgen_wrapped_jstag, 0);
     }}
+    // Set the terminated flag first so any re-entrant export call from within
+    // the abort handler is immediately blocked by __wbg_termination_guard().
     {mem_view}()[__wbg_terminated_addr] = 1;
+    // Invoke the Rust-registered abort handler (if any). The try/catch ensures
+    // a throwing or panicking handler cannot suppress the original error.
+    try {{ {invoke_handler}(wasm.__abort_handler.value); }} catch(_) {{}}
     throw e;
 }}"
         ));
@@ -4020,6 +4071,8 @@ function __wbg_handle_catch(e) {{
         // Use the constant for the import
         self.wasm_import_definitions
             .insert(id, "__wbindgen_wrapped_jstag".to_string());
+
+        Ok(())
     }
 
     /// Registers import names for all `Global` imports first before we actually
@@ -4834,12 +4887,7 @@ function __wbg_handle_catch(e) {{
                 assert!(!variadic);
                 assert_eq!(args.len(), 1);
                 let identifier = self.require_class_unwrap(class);
-                let unwrap = format!("{identifier}.__unwrap({})", args[0]);
-                if self.memory64 {
-                    Ok(self.to_wasm_bigint(&unwrap))
-                } else {
-                    Ok(unwrap)
-                }
+                Ok(format!("{identifier}.__unwrap({})", args[0]))
             }
         }
     }

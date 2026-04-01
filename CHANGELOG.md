@@ -3,7 +3,57 @@
 
 ## Unreleased
 
+## [0.2.117](https://github.com/rustwasm/wasm-bindgen/compare/0.2.116...0.2.117)
+
+### Fixed
+
+* Fixed a regression introduced in #5026 where stable `web-sys` methods that
+  accept a union type containing a `[WbgGeneric]` interface (e.g.
+  `ImageBitmapSource`, which includes `VideoFrame`) incorrectly applied typed
+  generics to all union expansions rather than only those whose argument type
+  is itself `[WbgGeneric]`. In practice this caused `Window::create_image_bitmap_with_*`
+  and the corresponding `WorkerGlobalScope` overloads to return
+  `Promise<ImageBitmap>` instead of `Promise<JsValue>` for the stable
+  (non-`VideoFrame`) call sites, breaking `JsFuture::from(promise).await?`.
+  [#5064](https://github.com/wasm-bindgen/wasm-bindgen/issues/5064)
+  [#5073](https://github.com/wasm-bindgen/wasm-bindgen/pull/5073)
+
+## [0.2.116](https://github.com/rustwasm/wasm-bindgen/compare/0.2.115...0.2.116)
+
 ### Added
+
+* Added `js_sys::Float16Array` bindings, `DataView` float16 accessors using
+  `f32`, and raw `[u16]` helper APIs for interoperability with binary16
+  representations such as `half::f16`.
+  [#5033](https://github.com/wasm-bindgen/wasm-bindgen/pull/5033)
+
+### Changed
+
+* Updated to Walrus 0.26.1 for deterministic type section ordering.
+  [#5069](https://github.com/wasm-bindgen/wasm-bindgen/pull/5069)
+
+* The `#[wasm_bindgen]` macro now emits `&mut (impl FnMut(...) + MaybeUnwindSafe)`
+  / `&(impl Fn(...) + MaybeUnwindSafe)` for raw `&mut dyn FnMut` / `&dyn Fn`
+  import arguments instead of a hidden generic parameter and where-clause. The
+  generated signature is cleaner and the `MaybeUnwindSafe` bound is visible
+  directly in the argument position. The ABI and wire format are unchanged.
+  When building with `panic=unwind`, closures that capture non-`UnwindSafe`
+  values (e.g. `&mut T`, `Cell<T>`) must wrap them in `AssertUnwindSafe` before
+  capture; on all other targets `MaybeUnwindSafe` is a no-op blanket impl.
+  [#5056](https://github.com/wasm-bindgen/wasm-bindgen/pull/5056)
+
+## [0.2.115](https://github.com/rustwasm/wasm-bindgen/compare/0.2.114...0.2.115)
+
+### Added
+
+* `console.debug/log/info/warn/error` output from user-spawned `Worker` and
+  `SharedWorker` instances is now forwarded to the CLI test runner during
+  headless browser tests, just like output from the main thread. Works for
+  blob URL workers, module workers, URL-based workers (importScripts), nested
+  workers, and shared workers (including logs emitted before the first port
+  connection). Non-cloneable arguments are serialized via `String()` rather
+  than crashing the worker. The `--nocapture` flag is respected.
+  [#5037](https://github.com/wasm-bindgen/wasm-bindgen/pull/5037)
 
 * `js_sys::Promise<T>` now implements `IntoFuture`, enabling direct `.await` on
   any JS promise without a wrapper type. The `wasm-bindgen-futures` implementation
@@ -22,6 +72,14 @@
 
 * Added `VideoFrame`, `VideoColorSpace`, and related WebCodecs dictionaries/enums to `web-sys`.
   [#5008](https://github.com/wasm-bindgen/wasm-bindgen/pull/5008)
+
+* Added `wasm_bindgen::handler` module with `set_on_abort` and `set_on_reinit`
+  hooks for `panic=unwind` builds. `set_on_abort` registers a callback invoked
+  after the instance is terminated (hard abort, OOM, stack overflow).
+  `set_on_reinit` registers a callback invoked after `reinit()` resets the
+  WebAssembly instance via `--experimental-reset-state-function`. Handlers are
+  stored as Wasm indirect-function-table indices so dispatch is safe even when
+  linear memory is corrupt.
 
 ### Changed
 
@@ -101,6 +159,8 @@
 * Fixed `skip_typescript` not being respected when using `reexport`, causing
   TypeScript definitions to be incorrectly emitted for re-exported items marked
   with `#[wasm_bindgen(skip_typescript)]`.
+  [#5051](https://github.com/wasm-bindgen/wasm-bindgen/pull/5051)
+
 ### Removed
 
 ## [0.2.114](https://github.com/wasm-bindgen/wasm-bindgen/compare/0.2.113...0.2.114)

@@ -12,6 +12,7 @@ use core::borrow::{Borrow, BorrowMut};
 use core::cell::UnsafeCell;
 use core::cell::{Cell, RefCell};
 use core::convert::Infallible;
+use core::marker::PhantomData;
 use core::ops::{Deref, DerefMut};
 use core::panic::{RefUnwindSafe, UnwindSafe};
 #[cfg(target_feature = "atomics")]
@@ -278,6 +279,165 @@ macro_rules! __wbindgen_coverage {
 pub fn assert_not_null<T>(s: *mut T) {
     if s.is_null() {
         throw_null();
+    }
+}
+
+#[cfg(target_arch = "wasm64")]
+type WasmWordRepr = f64;
+#[cfg(not(target_arch = "wasm64"))]
+type WasmWordRepr = usize;
+
+/// A single pointer-sized machine word using the JS-number ABI on wasm64.
+#[repr(transparent)]
+#[derive(Copy, Clone, Default)]
+pub struct WasmWord(WasmWordRepr);
+
+impl WasmWord {
+    #[inline]
+    pub fn from_usize(value: usize) -> Self {
+        #[cfg(target_arch = "wasm64")]
+        {
+            Self(value as f64)
+        }
+        #[cfg(not(target_arch = "wasm64"))]
+        {
+            Self(value)
+        }
+    }
+
+    #[inline]
+    pub fn into_usize(self) -> usize {
+        #[cfg(target_arch = "wasm64")]
+        {
+            self.0 as usize
+        }
+        #[cfg(not(target_arch = "wasm64"))]
+        {
+            self.0
+        }
+    }
+
+    #[inline]
+    pub fn from_isize(value: isize) -> Self {
+        #[cfg(target_arch = "wasm64")]
+        {
+            Self(value as f64)
+        }
+        #[cfg(not(target_arch = "wasm64"))]
+        {
+            Self(value as usize)
+        }
+    }
+
+    #[inline]
+    pub fn into_isize(self) -> isize {
+        #[cfg(target_arch = "wasm64")]
+        {
+            self.0 as isize
+        }
+        #[cfg(not(target_arch = "wasm64"))]
+        {
+            self.0 as isize
+        }
+    }
+
+    #[inline]
+    pub fn is_zero(&self) -> bool {
+        #[cfg(target_arch = "wasm64")]
+        {
+            self.0 == 0.0
+        }
+        #[cfg(not(target_arch = "wasm64"))]
+        {
+            self.0 == 0
+        }
+    }
+}
+
+impl WasmAbi for WasmWord {
+    type Prim1 = WasmWordRepr;
+    type Prim2 = ();
+    type Prim3 = ();
+    type Prim4 = ();
+
+    #[inline]
+    fn split(self) -> (Self::Prim1, (), (), ()) {
+        (self.0, (), (), ())
+    }
+
+    #[inline]
+    fn join(prim1: Self::Prim1, _: (), _: (), _: ()) -> Self {
+        Self(prim1)
+    }
+}
+
+/// A typed raw pointer using the JS-number ABI on wasm64.
+#[repr(transparent)]
+#[derive(Copy, Clone)]
+pub struct WasmPtr<T> {
+    word: WasmWord,
+    _marker: PhantomData<*mut T>,
+}
+
+impl<T> Default for WasmPtr<T> {
+    #[inline]
+    fn default() -> Self {
+        Self::null()
+    }
+}
+
+impl<T> WasmPtr<T> {
+    #[inline]
+    pub fn from_ptr(ptr: *mut T) -> Self {
+        Self::from_usize(ptr as usize)
+    }
+
+    #[inline]
+    pub fn into_ptr(self) -> *mut T {
+        self.into_usize() as *mut T
+    }
+
+    #[inline]
+    pub fn from_usize(value: usize) -> Self {
+        Self {
+            word: WasmWord::from_usize(value),
+            _marker: PhantomData,
+        }
+    }
+
+    #[inline]
+    pub fn into_usize(self) -> usize {
+        self.word.into_usize()
+    }
+
+    #[inline]
+    pub fn null() -> Self {
+        Self::from_usize(0)
+    }
+
+    #[inline]
+    pub fn is_null(&self) -> bool {
+        self.word.is_zero()
+    }
+}
+
+impl<T> WasmAbi for WasmPtr<T> {
+    type Prim1 = <WasmWord as WasmAbi>::Prim1;
+    type Prim2 = ();
+    type Prim3 = ();
+    type Prim4 = ();
+
+    #[inline]
+    fn split(self) -> (Self::Prim1, (), (), ()) {
+        self.word.split()
+    }
+
+    #[inline]
+    fn join(prim1: Self::Prim1, _: (), _: (), _: ()) -> Self {
+        Self {
+            word: WasmWord::join(prim1, (), (), ()),
+            _marker: PhantomData,
+        }
     }
 }
 
@@ -616,6 +776,114 @@ static GLOBAL_EXNDATA: ThreadLocalWrapper<Cell<[u32; 2]>> = ThreadLocalWrapper(C
 #[cfg(panic = "unwind")]
 #[no_mangle]
 pub static mut __instance_terminated: u32 = 0;
+
+/// Stores the Wasm indirect-function-table index of the registered hard-abort
+/// callback.  Zero means no callback is registered.
+#[cfg(panic = "unwind")]
+#[no_mangle]
+pub static mut __abort_handler: u32 = 0;
+
+/// Register a callback invoked when a hard abort (instance termination) occurs.
+///
+/// Returns the previously registered handler, or `None` if none was set.
+/// This mirrors the `std::panic::set_hook` convention and lets callers chain
+/// or restore handlers.
+///
+/// The callback fires after the terminated flag is set, so any re-entrant
+/// export call from within the handler is immediately blocked.  A throwing
+/// or panicking handler cannot suppress the original error.
+///
+/// **Experimental — only available when built with `panic=unwind`.**
+/// On `panic=abort` builds the no-op stub always returns `None` and the
+/// callback will never fire.
+#[cfg(panic = "unwind")]
+pub fn set_on_abort(f: fn()) -> Option<fn()> {
+    // On wasm32, function pointers are indices into the Wasm
+    // __indirect_function_table. Casting fn() -> usize -> u32 extracts
+    // that index without touching linear memory.
+    unsafe {
+        let prev = __abort_handler;
+        __abort_handler = f as usize as u32;
+        if prev != 0 {
+            Some(core::mem::transmute::<usize, fn()>(prev as usize))
+        } else {
+            None
+        }
+    }
+}
+
+/// No-op stub for `panic=abort` builds — handler will never fire.
+#[cfg(not(panic = "unwind"))]
+pub fn set_on_abort(_f: fn()) -> Option<fn()> {
+    None
+}
+
+/// Sentinel written to `__instance_terminated` to signal a reinit.
+/// Distinct from `0` (live) and `1` (hard terminated).
+#[cfg(panic = "unwind")]
+pub const REINIT_SENTINEL: u32 = u32::MAX;
+
+/// Signal that the instance should be reinitialised before the next export
+/// call.
+///
+/// **Experimental — only available when built with `panic=unwind` and when
+/// wasm-bindgen is invoked with `--experimental-reset-state-function`.**
+/// Without that flag the JS guard is not emitted, so the sentinel is written
+/// but never acted upon.  On `panic=abort` builds this is a no-op.
+#[cfg(panic = "unwind")]
+pub fn reinit() {
+    unsafe {
+        __instance_terminated = REINIT_SENTINEL;
+    }
+}
+
+/// Stores the Wasm indirect-function-table index of the registered reinit
+/// callback.  Zero means no callback is registered.
+#[cfg(panic = "unwind")]
+#[no_mangle]
+pub static mut __reinit_handler: u32 = 0;
+
+/// Register a callback invoked on the new instance immediately after
+/// `__wbg_reset_state()` creates it following a [`reinit()`] signal.
+///
+/// Returns the previously registered handler, or `None` if none was set.
+/// This mirrors the `std::panic::set_hook` convention and lets callers chain
+/// or restore handlers.
+///
+/// Because `__wbg_reset_state()` creates a completely fresh
+/// `WebAssembly.Instance`, all Rust statics (including `__reinit_handler`
+/// itself) are reset to their initial values on the new instance.  The
+/// callback should therefore be re-registered on every instance — the
+/// idiomatic way is via a `#[wasm_bindgen(start)]` function that runs
+/// automatically on every instantiation.
+///
+/// **Experimental — only available when built with `panic=unwind` and when
+/// wasm-bindgen is invoked with `--experimental-reset-state-function`.**
+/// Without that flag the JS guard is not emitted and the callback will never
+/// fire.  On `panic=abort` builds the no-op stub always returns `None`.
+#[cfg(panic = "unwind")]
+pub fn set_on_reinit(f: fn()) -> Option<fn()> {
+    // Same table-index cast as set_on_abort.
+    unsafe {
+        let prev = __reinit_handler;
+        __reinit_handler = f as usize as u32;
+        if prev != 0 {
+            Some(core::mem::transmute::<usize, fn()>(prev as usize))
+        } else {
+            None
+        }
+    }
+}
+
+/// No-op stub for `panic=abort` builds.
+#[cfg(not(panic = "unwind"))]
+pub fn set_on_reinit(_f: fn()) -> Option<fn()> {
+    None
+}
+
+/// No-op stub for `panic=abort` builds.
+#[cfg(not(panic = "unwind"))]
+pub fn reinit() {}
 
 #[no_mangle]
 pub unsafe extern "C" fn __wbindgen_exn_store(idx: u32) {

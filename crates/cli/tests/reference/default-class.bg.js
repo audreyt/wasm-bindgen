@@ -21,14 +21,14 @@ class _default {
      */
     constructor(value) {
         const ret = wasm.default_new(value);
-        this.__wbg_ptr = (ret >>> 0);
+        this.__wbg_ptr = ret >>> 0;
         _defaultFinalization.register(this, this.__wbg_ptr, this);
         return this;
     }
 }
 if (Symbol.dispose) _default.prototype[Symbol.dispose] = _default.prototype.free;
 export { _default as default }
-export function __wbg___wbindgen_throw_6ddd609b62940d55(arg0, arg1) {
+export function __wbg___wbindgen_throw_81fc77679af83bc6(arg0, arg1) {
     throw new Error(getStringFromWasm0(arg0, arg1));
 }
 export function __wbindgen_init_externref_table() {

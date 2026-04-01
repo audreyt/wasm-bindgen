@@ -669,15 +669,29 @@ impl<'a, 'b> JsBuilder<'a, 'b> {
         self.cx.to_js_ptr(val)
     }
 
+    /// Inline pointer coercion for assignments and initializers.
+    pub fn coerce_ptr_inline(&self, val: &str) -> String {
+        self.cx.to_js_ptr_inline(val)
+    }
+
     /// Coerce a wasm value to a pointer-sized JS value for the public API.
     /// For wasm32 this is an unsigned JS number; for wasm64 it is a BigInt.
     pub fn coerce_raw_ptr(&self, val: &str) -> String {
         self.cx.to_wasm_ptr(val)
     }
 
+    /// Coerce an internal Rust-owned pointer value while keeping JS-side state numeric.
+    pub fn coerce_internal_ptr(&self, val: &str) -> String {
+        self.cx.to_internal_wasm_ptr(val)
+    }
+
     /// Format a pointer-sized literal for the target ABI.
     pub fn size_literal(&self, size: usize) -> String {
         self.cx.usize_literal(size)
+    }
+
+    pub fn internal_word_literal(&self, size: usize) -> String {
+        self.cx.internal_word_literal(size)
     }
 
     pub fn prelude(&mut self, prelude: &str) {
@@ -1167,14 +1181,14 @@ fn instruction(
             js.assert_not_moved(&val);
             let i = js.tmp();
             js.prelude(&format!("var ptr{i} = {val}.__destroy_into_raw();"));
-            js.push(js.coerce_raw_ptr(&format!("ptr{i}")));
+            js.push(js.coerce_internal_ptr(&format!("ptr{i}")));
         }
 
         Instruction::I32FromExternrefRustBorrow { class } => {
             let val = js.pop();
             js.assert_class(&val, class);
             js.assert_not_moved(&val);
-            js.push(js.coerce_raw_ptr(&format!("{val}.__wbg_ptr")));
+            js.push(js.coerce_internal_ptr(&format!("{val}.__wbg_ptr")));
         }
 
         Instruction::I32FromOptionRust { class } => {
@@ -1187,10 +1201,10 @@ fn instruction(
             js.assert_not_moved(&val);
             js.prelude(&format!("ptr{i} = {val}.__destroy_into_raw();"));
             js.prelude("}");
+            let zero = js.internal_word_literal(0);
             js.push(format!(
-                "ptr{i} ? {} : 0{}",
-                js.coerce_raw_ptr(&format!("ptr{i}")),
-                js.cx.wasm_bigint_suffix()
+                "ptr{i} ? {} : {zero}",
+                js.coerce_internal_ptr(&format!("ptr{i}")),
             ));
         }
 
@@ -1465,7 +1479,7 @@ fn instruction(
                     // Get the JS identifier for the class, which may be aliased
                     // if the name conflicts with a JS builtin (e.g., `Array` -> `Array2`)
                     let identifier = js.cx.require_class_identifier(class);
-                    let coerced = js.coerce_ptr(&val);
+                    let coerced = js.coerce_ptr_inline(&val);
                     let (ptr_assignment, register_data) = if js.cx.config.generate_reset_state {
                         (
                             format!(
@@ -1567,7 +1581,7 @@ fn instruction(
             } else {
                 // Borrowed closure without destructor
                 let i = js.tmp();
-                let zero = format!("0{}", js.cx.wasm_bigint_suffix());
+                let zero = js.internal_word_literal(0);
                 js.prelude(&format!("var state{i} = {{a: {a}, b: {b}}};"));
                 let args = (0..*nargs)
                     .map(|i| format!("arg{i}"))

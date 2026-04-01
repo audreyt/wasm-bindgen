@@ -57,12 +57,12 @@ simple! {
     JsValue => EXTERNREF
 }
 
-// isize/usize map to I32/U32 on wasm32 and I64/U64 on wasm64
+// isize/usize map to I32/U32 on wasm32 and direct *_AS_F64 descriptors on wasm64
 cfg_if! {
     if #[cfg(target_pointer_width = "64")] {
         simple! {
-            isize => I64
-            usize => U64
+            isize => I64_AS_F64
+            usize => U64_AS_F64
         }
     } else {
         simple! {
