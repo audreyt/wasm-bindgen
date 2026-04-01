@@ -4,10 +4,12 @@ use core::panic::AssertUnwindSafe;
 
 use crate::__rt::marker::ErasableGeneric;
 use crate::__rt::maybe_catch_unwind;
+use crate::__rt::WasmWord;
 use crate::closure::{
     Closure, IntoWasmClosure, IntoWasmClosureRef, IntoWasmClosureRefMut, ScopedClosure,
-    WasmClosure, WasmClosureFnOnce, WasmClosureFnOnceAbort, WasmClosureSlice,
+    WasmClosure, WasmClosureFnOnce, WasmClosureFnOnceAbort,
 };
+use crate::convert::slices::WasmSlice;
 use crate::convert::traits::UpcastFrom;
 use crate::convert::RefFromWasmAbi;
 use crate::convert::{FromWasmAbi, IntoWasmAbi, ReturnWasmAbi, WasmAbi, WasmRet};
@@ -53,15 +55,12 @@ macro_rules! closures {
         where
             Self: WasmDescribe,
         {
-            type Abi = WasmClosureSlice;
+            type Abi = WasmSlice;
 
-            fn into_abi(self) -> WasmClosureSlice {
+            fn into_abi(self) -> WasmSlice {
                 unsafe {
                     let (a, b): (usize, usize) = mem::transmute(self);
-                    WasmClosureSlice {
-                        a: crate::__rt::WasmWord::from_usize(a),
-                        b: crate::__rt::WasmWord::from_usize(b),
-                    }
+                    WasmSlice::from_usize(a, b)
                 }
             }
         }
@@ -80,8 +79,8 @@ macro_rules! closures {
         // `UNWIND_SAFE` has no effect — panics always abort.
         #[allow(non_snake_case)]
         unsafe extern "C-unwind" fn invoke<$($var: $FromWasmAbi,)* R: ReturnWasmAbi, const UNWIND_SAFE: bool>(
-            a: crate::__rt::WasmWord,
-            b: crate::__rt::WasmWord,
+            a: WasmWord,
+            b: WasmWord,
             $(
             $arg1: <$var::Abi as WasmAbi>::Prim1,
             $arg2: <$var::Abi as WasmAbi>::Prim2,
