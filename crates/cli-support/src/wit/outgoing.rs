@@ -135,7 +135,7 @@ impl InstructionBuilder<'_, '_> {
 
             Descriptor::String => {
                 // fetch the ptr/length ...
-                let ptr_ty = self.ptr_ty();
+                let ptr_ty = self.outgoing_internal_word_ty();
                 self.get(ptr_ty.clone());
                 self.get(ptr_ty);
 
@@ -168,7 +168,7 @@ impl InstructionBuilder<'_, '_> {
                 })?;
                 let mem = self.cx.memory()?;
                 let free = self.cx.free()?;
-                let ptr_ty = self.ptr_ty();
+                let ptr_ty = self.outgoing_internal_word_ty();
                 self.instruction(
                     &[ptr_ty.clone(), ptr_ty],
                     Instruction::VectorLoad {
@@ -234,7 +234,7 @@ impl InstructionBuilder<'_, '_> {
             Descriptor::CachedString => self.cached_string(false)?,
 
             Descriptor::String => {
-                let ptr_ty = self.ptr_ty();
+                let ptr_ty = self.outgoing_internal_word_ty();
                 self.instruction(
                     &[ptr_ty.clone(), ptr_ty],
                     Instruction::MemoryToString(self.cx.memory()?),
@@ -248,7 +248,7 @@ impl InstructionBuilder<'_, '_> {
                     )
                 })?;
                 let mem = self.cx.memory()?;
-                let ptr_ty = self.ptr_ty();
+                let ptr_ty = self.outgoing_internal_word_ty();
                 self.instruction(
                     &[ptr_ty.clone(), ptr_ty],
                     Instruction::View {
@@ -435,7 +435,7 @@ impl InstructionBuilder<'_, '_> {
                 })?;
                 let mem = self.cx.memory()?;
                 let free = self.cx.free()?;
-                let ptr_ty = self.ptr_ty();
+                let ptr_ty = self.outgoing_internal_word_ty();
                 self.instruction(
                     &[ptr_ty.clone(), ptr_ty],
                     Instruction::OptionVectorLoad {
@@ -553,7 +553,7 @@ impl InstructionBuilder<'_, '_> {
             }
             Descriptor::String => {
                 // fetch the ptr/length ...
-                let ptr_ty = self.ptr_ty();
+                let ptr_ty = self.outgoing_internal_word_ty();
                 self.get(ptr_ty.clone());
                 self.get(ptr_ty);
                 // fetch the err/is_err
@@ -635,7 +635,7 @@ impl InstructionBuilder<'_, '_> {
                     )
                 })?;
                 let mem = self.cx.memory()?;
-                let ptr_ty = self.ptr_ty();
+                let ptr_ty = self.outgoing_internal_word_ty();
                 self.instruction(
                     &[ptr_ty.clone(), ptr_ty],
                     Instruction::OptionView {
@@ -682,7 +682,7 @@ impl InstructionBuilder<'_, '_> {
     fn cached_string(&mut self, owned: bool) -> Result<(), Error> {
         let mem = self.cx.memory()?;
         let free = self.cx.free()?;
-        let ptr_ty = self.ptr_ty();
+        let ptr_ty = self.outgoing_internal_word_ty();
         self.instruction(
             &[ptr_ty.clone(), ptr_ty],
             Instruction::CachedStringLoad {
@@ -719,6 +719,14 @@ impl InstructionBuilder<'_, '_> {
             Instruction::OptionF64Sentinel,
             &[ty.option()],
         );
+    }
+
+    fn outgoing_internal_word_ty(&self) -> AdapterType {
+        if self.return_position && self.cx.memory64() {
+            AdapterType::F64
+        } else {
+            self.ptr_ty()
+        }
     }
 }
 

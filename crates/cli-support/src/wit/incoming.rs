@@ -71,7 +71,7 @@ impl InstructionBuilder<'_, '_> {
                 )
             }
             Descriptor::RustStruct(class) => {
-                let ptr_ty = self.ptr_ty();
+                let ptr_ty = self.incoming_internal_word_ty();
                 self.instruction(
                     &[AdapterType::Struct(class.clone())],
                     Instruction::I32FromExternrefRustOwned {
@@ -142,7 +142,7 @@ impl InstructionBuilder<'_, '_> {
             Descriptor::Option(d) => self.incoming_option(d)?,
 
             Descriptor::String | Descriptor::CachedString => {
-                let ptr_ty = self.ptr_ty();
+                let ptr_ty = self.incoming_internal_word_ty();
                 self.instruction(
                     &[AdapterType::String],
                     Instruction::StringToMemory {
@@ -158,7 +158,7 @@ impl InstructionBuilder<'_, '_> {
                 let kind = arg.vector_kind().ok_or_else(|| {
                     format_err!("unsupported argument type for calling Rust function from JS {arg:?}")
                 })?;
-                let ptr_ty = self.ptr_ty();
+                let ptr_ty = self.incoming_internal_word_ty();
                 self.instruction(
                     &[AdapterType::Vector(kind.clone())],
                     Instruction::VectorToMemory {
@@ -361,7 +361,7 @@ impl InstructionBuilder<'_, '_> {
                 );
             }
             Descriptor::RustStruct(name) => {
-                let ptr_ty = self.ptr_ty();
+                let ptr_ty = self.incoming_internal_word_ty();
                 self.instruction(
                     &[AdapterType::Struct(name.clone()).option()],
                     Instruction::I32FromOptionRust {
@@ -375,7 +375,7 @@ impl InstructionBuilder<'_, '_> {
                 let malloc = self.cx.malloc()?;
                 let mem = self.cx.memory()?;
                 let realloc = self.cx.realloc();
-                let ptr_ty = self.ptr_ty();
+                let ptr_ty = self.incoming_internal_word_ty();
                 self.instruction(
                     &[AdapterType::String.option()],
                     Instruction::OptionString {
@@ -395,7 +395,7 @@ impl InstructionBuilder<'_, '_> {
                 })?;
                 let malloc = self.cx.malloc()?;
                 let mem = self.cx.memory()?;
-                let ptr_ty = self.ptr_ty();
+                let ptr_ty = self.incoming_internal_word_ty();
                 self.instruction(
                     &[AdapterType::Vector(kind.clone()).option()],
                     Instruction::OptionVector { kind, malloc, mem },
@@ -544,5 +544,13 @@ impl InstructionBuilder<'_, '_> {
             Instruction::F64FromOptionSentinelNumber,
             &[AdapterType::F64],
         );
+    }
+
+    fn incoming_internal_word_ty(&self) -> AdapterType {
+        if self.return_position && self.cx.memory64() {
+            AdapterType::F64
+        } else {
+            self.ptr_ty()
+        }
     }
 }

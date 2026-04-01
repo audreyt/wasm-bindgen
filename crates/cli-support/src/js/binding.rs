@@ -1641,7 +1641,13 @@ fn instruction(
             let free = js.cx.export_name_of(*free);
             js.prelude(&format!("var v{i} = {f}({ptr}, {len}).slice();"));
             let size = js.size_literal(kind.size());
-            js.prelude(&format!("wasm.{free}({ptr}, {len} * {size}, {size});"));
+            let free_ptr = if js.cx.memory64 {
+                js.coerce_raw_ptr(&ptr)
+            } else {
+                ptr.clone()
+            };
+            let free_len = format!("{} * {size}", js.cx.to_wasm_bigint(&len));
+            js.prelude(&format!("wasm.{free}({free_ptr}, {free_len}, {size});"));
             js.push(format!("v{i}"))
         }
 
@@ -1655,7 +1661,13 @@ fn instruction(
             js.prelude(&format!("if ({ptr}) {{"));
             js.prelude(&format!("v{i} = {f}({ptr}, {len}).slice();"));
             let size = js.size_literal(kind.size());
-            js.prelude(&format!("wasm.{free}({ptr}, {len} * {size}, {size});"));
+            let free_ptr = if js.cx.memory64 {
+                js.coerce_raw_ptr(&ptr)
+            } else {
+                ptr.clone()
+            };
+            let free_len = format!("{} * {size}", js.cx.to_wasm_bigint(&len));
+            js.prelude(&format!("wasm.{free}({free_ptr}, {free_len}, {size});"));
             js.prelude("}");
             js.push(format!("v{i}"));
         }

@@ -1058,23 +1058,39 @@ macro_rules! big_integers {
 
             #[inline]
             fn try_from(v: JsValue) -> Result<Self, JsValue> {
-                Self::try_from_js_value(v)
+                if let Some(as_i64) = __wbindgen_bigint_get_as_i64(&v) {
+                    let as_self = as_i64 as $n;
+                    if v == as_self {
+                        return Ok(as_self);
+                    }
+                }
+
+                Err(v)
             }
         }
 
         impl TryFromJsValue for $n {
             #[inline]
             fn try_from_js_value_ref(val: &JsValue) -> Option<$n> {
-                let as_i64 = __wbindgen_bigint_get_as_i64(&val)?;
-                // Reinterpret bits; ABI-wise this is safe to do and allows us to avoid
-                // having separate intrinsics per signed/unsigned types.
-                let as_self = as_i64 as $n;
-                // Double-check that we didn't truncate the bigint to 64 bits.
-                if val == &as_self {
-                    Some(as_self)
-                } else {
-                    None
+                if let Some(as_i64) = __wbindgen_bigint_get_as_i64(&val) {
+                    // Reinterpret bits; ABI-wise this is safe to do and allows us to avoid
+                    // having separate intrinsics per signed/unsigned types.
+                    let as_self = as_i64 as $n;
+                    // Double-check that we didn't truncate the bigint to 64 bits.
+                    if val == &as_self {
+                        return Some(as_self);
+                    }
                 }
+
+                #[cfg(target_arch = "wasm64")]
+                if let Some(as_f64) = val.as_f64() {
+                    let as_self = as_f64 as $n;
+                    if (as_self as f64) == as_f64 {
+                        return Some(as_self);
+                    }
+                }
+
+                None
             }
         }
     )*)

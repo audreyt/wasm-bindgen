@@ -156,40 +156,40 @@ type_wasm_native!(
 
 #[cfg(target_arch = "wasm64")]
 impl IntoWasmAbi for i64 {
-    type Abi = f64;
+    type Abi = i64;
 
     #[inline]
-    fn into_abi(self) -> f64 {
-        self as f64
+    fn into_abi(self) -> i64 {
+        self
     }
 }
 
 #[cfg(target_arch = "wasm64")]
 impl FromWasmAbi for i64 {
-    type Abi = f64;
+    type Abi = i64;
 
     #[inline]
-    unsafe fn from_abi(js: f64) -> Self {
-        js as i64
+    unsafe fn from_abi(js: i64) -> Self {
+        js
     }
 }
 
 #[cfg(target_arch = "wasm64")]
 impl IntoWasmAbi for u64 {
-    type Abi = f64;
+    type Abi = i64;
 
     #[inline]
-    fn into_abi(self) -> f64 {
-        self as f64
+    fn into_abi(self) -> i64 {
+        self as i64
     }
 }
 
 #[cfg(target_arch = "wasm64")]
 impl FromWasmAbi for u64 {
-    type Abi = f64;
+    type Abi = i64;
 
     #[inline]
-    unsafe fn from_abi(js: f64) -> Self {
+    unsafe fn from_abi(js: i64) -> Self {
         js as u64
     }
 }

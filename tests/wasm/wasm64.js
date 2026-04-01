@@ -26,12 +26,12 @@ exports.js_roundtrip_large_slice = function (slice) {
 
 // Test creating and freeing a class instance to exercise the BigInt(ptr) free path.
 exports.js_create_and_free_class = function () {
-  const obj = new wasm.Wasm64TestClass(42);
-  if (obj.get_value() !== 42) {
+  const obj = new wasm.Wasm64TestClass(42n);
+  if (obj.get_value() !== 42n) {
     throw new Error(`Expected 42, got ${obj.get_value()}`);
   }
-  if (obj.add(8) !== 50) {
-    throw new Error(`Expected 50, got ${obj.add(8)}`);
+  if (obj.add(8n) !== 50n) {
+    throw new Error(`Expected 50, got ${obj.add(8n)}`);
   }
   // Free the object - this exercises the BigInt(ptr) free function path
   obj.free();

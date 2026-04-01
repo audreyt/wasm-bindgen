@@ -1264,7 +1264,7 @@ impl<'a> Context<'a> {
         self.aux.structs.push(aux);
 
         let ptr_desc = if self.memory64() {
-            Descriptor::I64
+            Descriptor::I64AsF64
         } else {
             Descriptor::I32
         };
@@ -1472,6 +1472,7 @@ impl<'a> Context<'a> {
             walrus::ImportKind::Function(f) => f,
             _ => bail!("bound import must be assigned to function"),
         };
+        let memory64 = self.memory64();
         self.normalize_memory64_signature(&mut signature, core_id);
 
         // Process the returned type first to see if it needs an out-pointer. This
@@ -1486,7 +1487,11 @@ impl<'a> Context<'a> {
         // usage of closures going out to the import.
         let mut args = ret.cx.instruction_builder(false);
         if uses_retptr {
-            args.input.push(AdapterType::I32);
+            args.input.push(if memory64 {
+                AdapterType::F64
+            } else {
+                AdapterType::I32
+            });
         }
         for arg in signature.arguments.iter() {
             args.outgoing(arg)?;
@@ -1700,8 +1705,6 @@ impl<'a> Context<'a> {
         }
 
         match descriptor {
-            Descriptor::I64 => *descriptor = Descriptor::I64AsF64,
-            Descriptor::U64 => *descriptor = Descriptor::U64AsF64,
             Descriptor::Option(inner) => match inner.as_mut() {
                 Descriptor::I64 => **inner = Descriptor::I64AsF64,
                 Descriptor::U64 => **inner = Descriptor::U64AsF64,
