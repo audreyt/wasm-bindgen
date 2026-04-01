@@ -675,11 +675,6 @@ impl<'a, 'b> JsBuilder<'a, 'b> {
         self.cx.to_wasm_ptr(val)
     }
 
-    /// Coerce an internal Rust-owned pointer value while keeping JS-side state numeric.
-    pub fn coerce_internal_ptr(&self, val: &str) -> String {
-        self.cx.to_internal_wasm_ptr(val)
-    }
-
     /// Decode a Rust-owned class pointer coming back from Wasm.
     /// On wasm64 this may arrive either as a JS number or as i64 bit-pattern BigInt.
     pub fn decode_rust_struct_ptr(&mut self, val: &str) -> String {
@@ -694,10 +689,6 @@ impl<'a, 'b> JsBuilder<'a, 'b> {
     /// Format a pointer-sized literal for the target ABI.
     pub fn size_literal(&self, size: usize) -> String {
         self.cx.usize_literal(size)
-    }
-
-    pub fn internal_word_literal(&self, size: usize) -> String {
-        self.cx.internal_word_literal(size)
     }
 
     pub fn prelude(&mut self, prelude: &str) {
@@ -1187,14 +1178,14 @@ fn instruction(
             js.assert_not_moved(&val);
             let i = js.tmp();
             js.prelude(&format!("var ptr{i} = {val}.__destroy_into_raw();"));
-            js.push(js.coerce_internal_ptr(&format!("ptr{i}")));
+            js.push(js.coerce_ptr(&format!("ptr{i}")));
         }
 
         Instruction::I32FromExternrefRustBorrow { class } => {
             let val = js.pop();
             js.assert_class(&val, class);
             js.assert_not_moved(&val);
-            js.push(js.coerce_internal_ptr(&format!("{val}.__wbg_ptr")));
+            js.push(js.coerce_ptr(&format!("{val}.__wbg_ptr")));
         }
 
         Instruction::I32FromOptionRust { class } => {
@@ -1207,10 +1198,9 @@ fn instruction(
             js.assert_not_moved(&val);
             js.prelude(&format!("ptr{i} = {val}.__destroy_into_raw();"));
             js.prelude("}");
-            let zero = js.internal_word_literal(0);
             js.push(format!(
-                "ptr{i} ? {} : {zero}",
-                js.coerce_internal_ptr(&format!("ptr{i}")),
+                "ptr{i} ? {} : 0",
+                js.coerce_ptr(&format!("ptr{i}")),
             ));
         }
 
@@ -1595,7 +1585,6 @@ fn instruction(
             } else {
                 // Borrowed closure without destructor
                 let i = js.tmp();
-                let zero = js.internal_word_literal(0);
                 js.prelude(&format!("var state{i} = {{a: {a}, b: {b}}};"));
                 let args = (0..*nargs)
                     .map(|i| format!("arg{i}"))
@@ -1608,7 +1597,7 @@ fn instruction(
                     js.prelude(&format!(
                         "var cb{i} = ({args}) => {{
                             const a = state{i}.a;
-                            state{i}.a = {zero};
+                            state{i}.a = 0;
                             try {{
                                 return {wrapper}(a, state{i}.b, {args});
                             }} finally {{
@@ -1631,13 +1620,13 @@ fn instruction(
                         // ensure that any lingering references to the closure
                         // will fail immediately due to null pointers passed in
                         // to Rust.
-                        js.finally(&format!("state{i}.a = {zero};"));
+                        js.finally(&format!("state{i}.a = 0;"));
                     }
                     ClosureDtor::Borrowed => {
                         // Borrowed closure from ScopedClosure::borrow/borrow_mut. Add
                         // _wbg_cb_unref to invalidate the closure at the end of
                         // the scoped block.
-                        js.prelude(&format!("cb{i}._wbg_cb_unref = () => state{i}.a = {zero};"));
+                        js.prelude(&format!("cb{i}._wbg_cb_unref = () => state{i}.a = 0;"));
                     }
                 }
                 js.push(format!("cb{i}"));

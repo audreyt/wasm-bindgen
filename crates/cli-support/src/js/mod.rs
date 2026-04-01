@@ -332,25 +332,6 @@ impl<'a> Context<'a> {
         }
     }
 
-    /// Coerce an internal Rust-owned pointer value into the core Wasm ABI.
-    /// These shims stay numeric on wasm64 but still normalize to `u32` on wasm32.
-    fn to_internal_wasm_ptr(&self, expr: &str) -> String {
-        if self.memory64 {
-            expr.to_string()
-        } else {
-            format!("({expr} >>> 0)")
-        }
-    }
-
-    /// Inline form of `to_internal_wasm_ptr`.
-    fn to_internal_wasm_ptr_inline(&self, expr: &str) -> String {
-        if self.memory64 {
-            expr.to_string()
-        } else {
-            format!("{expr} >>> 0")
-        }
-    }
-
     /// Coerce a wasm pointer-sized value to an unsigned JS pointer.
     fn to_js_ptr(&self, expr: &str) -> String {
         if self.memory64 {
@@ -390,11 +371,6 @@ impl<'a> Context<'a> {
         } else {
             value.to_string()
         }
-    }
-
-    /// Formats a JS number literal for internal pointer-word shims.
-    fn internal_word_literal(&self, value: usize) -> String {
-        value.to_string()
     }
 
     /// Coerces the stack pointer shim result into a JS pointer.
@@ -1708,45 +1684,21 @@ if (require('worker_threads').isMainThread) {{
         }
 
         if class.unwrap_needed {
-            let unwrap_null = "0";
-            let unwrap_checks = {
-                let mut checks = String::new();
-                if self.config.generate_reset_state {
-                    checks.push_str(
-                        "\
-                        if (jsValue.__wbg_inst !== undefined && jsValue.__wbg_inst !== __wbg_instance_id) {
-                            throw new Error('Invalid stale object from previous Wasm instance');
-                        }
-                        ",
-                    );
-                }
-                if self.config.debug {
-                    checks.push_str(
-                        "\
-                        if (jsValue.__wbg_ptr == 0) {
-                            throw new Error('Attempt to use a moved value');
-                        }
-                        ",
-                    );
-                }
-                checks
-            };
-            let unwrap_ptr = "return jsValue.__destroy_into_raw();";
             dst.push_str(&format!(
                 "\
                 static __unwrap(jsValue) {{
                     if (!(jsValue instanceof {identifier})) {{
-                        return {unwrap_null};
+                        return 0;
                     }}
-                    {unwrap_checks}
-                    {unwrap_ptr}
+
+                    return jsValue.__destroy_into_raw();
                 }}
                 ",
             ));
         }
 
         let free_fn = wasm_bindgen_shared::free_function(qualified);
-        let free_ptr = self.to_internal_wasm_ptr_inline("ptr");
+        let free_ptr = self.to_js_ptr_inline("ptr");
         let finalization_callback = if self.config.generate_reset_state {
             format!(
                 "({{ ptr, instance }}) => {{
@@ -3357,7 +3309,6 @@ if (require('worker_threads').isMainThread) {{
 
     fn expose_make_mut_closure(&mut self) {
         let destroy_state = self.expose_closure_finalization();
-        let zero = self.internal_word_literal(0);
 
         if matches!(self.config.mode, OutputMode::Emscripten) {
             self.emscripten_global_deps
@@ -3392,7 +3343,7 @@ if (require('worker_threads').isMainThread) {{
                         // be deallocated while we're invoking it.
                         state.cnt++;
                         const a = state.a;
-                        state.a = {zero};
+                        state.a = 0;
                         try {{
                             return f(a, state.b, ...args);
                         }} finally {{
@@ -3403,7 +3354,7 @@ if (require('worker_threads').isMainThread) {{
                     real._wbg_cb_unref = () => {{
                         if (--state.cnt === 0) {{
                             {destroy_state};
-                            state.a = {zero};
+                            state.a = 0;
                             CLOSURE_DTORS.unregister(state);
                         }}
                     }};
@@ -3430,7 +3381,6 @@ if (require('worker_threads').isMainThread) {{
 
     fn expose_make_closure(&mut self) {
         let destroy_state = self.expose_closure_finalization();
-        let zero = self.internal_word_literal(0);
 
         if matches!(self.config.mode, OutputMode::Emscripten) {
             self.emscripten_global_deps
@@ -3473,7 +3423,7 @@ if (require('worker_threads').isMainThread) {{
                     real._wbg_cb_unref = () => {{
                         if (--state.cnt === 0) {{
                             {destroy_state};
-                            state.a = {zero};
+                            state.a = 0;
                             CLOSURE_DTORS.unregister(state);
                         }}
                     }};
