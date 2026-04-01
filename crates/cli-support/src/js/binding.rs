@@ -669,11 +669,6 @@ impl<'a, 'b> JsBuilder<'a, 'b> {
         self.cx.to_js_ptr(val)
     }
 
-    /// Inline pointer coercion for assignments and initializers.
-    pub fn coerce_ptr_inline(&self, val: &str) -> String {
-        self.cx.to_js_ptr_inline(val)
-    }
-
     /// Coerce a wasm value to a pointer-sized JS value for the public API.
     /// For wasm32 this is an unsigned JS number; for wasm64 it is a BigInt.
     pub fn coerce_raw_ptr(&self, val: &str) -> String {
@@ -683,6 +678,17 @@ impl<'a, 'b> JsBuilder<'a, 'b> {
     /// Coerce an internal Rust-owned pointer value while keeping JS-side state numeric.
     pub fn coerce_internal_ptr(&self, val: &str) -> String {
         self.cx.to_internal_wasm_ptr(val)
+    }
+
+    /// Decode a Rust-owned class pointer coming back from Wasm.
+    /// On wasm64 this may arrive either as a JS number or as i64 bit-pattern BigInt.
+    pub fn decode_rust_struct_ptr(&mut self, val: &str) -> String {
+        if self.cx.memory64 {
+            let decode = self.cx.expose_decode_internal_rust_ptr();
+            format!("{decode}({val})")
+        } else {
+            val.to_string()
+        }
     }
 
     /// Format a pointer-sized literal for the target ABI.
@@ -1479,7 +1485,11 @@ fn instruction(
                     // Get the JS identifier for the class, which may be aliased
                     // if the name conflicts with a JS builtin (e.g., `Array` -> `Array2`)
                     let identifier = js.cx.require_class_identifier(class);
-                    let coerced = js.coerce_ptr_inline(&val);
+                    let coerced = if js.cx.memory64 {
+                        js.decode_rust_struct_ptr(&val)
+                    } else {
+                        js.cx.to_js_ptr_inline(&val)
+                    };
                     let (ptr_assignment, register_data) = if js.cx.config.generate_reset_state {
                         (
                             format!(
@@ -1507,7 +1517,8 @@ fn instruction(
                 }
                 Some(_) | None => {
                     let identifier = js.cx.require_class_wrap(class);
-                    js.push(format!("{identifier}.__wrap({val})"));
+                    let coerced = js.decode_rust_struct_ptr(&val);
+                    js.push(format!("{identifier}.__wrap({coerced})"));
                 }
             }
         }
@@ -1516,7 +1527,10 @@ fn instruction(
             assert!(constructor.is_none());
             let val = js.pop();
             let identifier = js.cx.require_class_wrap(class);
-            js.push(format!("{val} ? {identifier}.__wrap({val}) : undefined"));
+            let coerced = js.decode_rust_struct_ptr(&val);
+            js.push(format!(
+                "{val} ? {identifier}.__wrap({coerced}) : undefined"
+            ));
         }
 
         Instruction::CachedStringLoad {

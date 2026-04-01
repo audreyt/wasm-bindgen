@@ -43,4 +43,5 @@ tys! {
     UNIT
     CLAMPED
     NONNULL
+    RAW_POINTER
 }

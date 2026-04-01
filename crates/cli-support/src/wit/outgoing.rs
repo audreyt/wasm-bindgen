@@ -78,6 +78,13 @@ impl InstructionBuilder<'_, '_> {
             Descriptor::I64AsF64 | Descriptor::U64AsF64 => {
                 self.outgoing_f64();
             }
+            Descriptor::RawPointer => {
+                if self.cx.memory64() {
+                    self.outgoing_f64();
+                } else {
+                    self.outgoing_i32(AdapterType::U32);
+                }
+            }
             Descriptor::I128 => {
                 self.instruction(
                     &[AdapterType::I64, AdapterType::I64],
@@ -448,6 +455,13 @@ impl InstructionBuilder<'_, '_> {
                     &[AdapterType::NonNull.option()],
                 );
             }
+            Descriptor::RawPointer => {
+                if self.cx.memory64() {
+                    self.option_native(false, ValType::I64);
+                } else {
+                    self.out_option_sentinel64(AdapterType::U32);
+                }
+            }
 
             _ => bail!(
                 "unsupported optional argument type for calling JS function from Rust: {arg:?}"
@@ -485,7 +499,8 @@ impl InstructionBuilder<'_, '_> {
             | Descriptor::Option(_)
             | Descriptor::Vector(_)
             | Descriptor::Unit
-            | Descriptor::NonNull => {
+            | Descriptor::NonNull
+            | Descriptor::RawPointer => {
                 // We must throw before reading the Ok type, if there is an error. However, the
                 // structure of ResultAbi is that the Err value + discriminant come last (for
                 // alignment reasons). So the UnwrapResult instruction must come first, but the

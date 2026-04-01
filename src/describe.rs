@@ -88,14 +88,14 @@ cfg_if! {
 impl<T> WasmDescribe for *const T {
     #[cfg_attr(wasm_bindgen_unstable_test_coverage, coverage(off))]
     fn describe() {
-        <usize as WasmDescribe>::describe()
+        inform(RAW_POINTER)
     }
 }
 
 impl<T> WasmDescribe for *mut T {
     #[cfg_attr(wasm_bindgen_unstable_test_coverage, coverage(off))]
     fn describe() {
-        <usize as WasmDescribe>::describe()
+        inform(RAW_POINTER)
     }
 }
 

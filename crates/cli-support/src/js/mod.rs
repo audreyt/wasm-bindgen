@@ -3305,6 +3305,27 @@ if (require('worker_threads').isMainThread) {{
         });
     }
 
+    fn expose_decode_internal_rust_ptr(&mut self) -> String {
+        self.intrinsic(
+            "decode_internal_rust_ptr".into(),
+            "_decodeInternalRustPtr".into(),
+            {
+                "
+                const __wbindgen_internal_rust_ptr_view = new DataView(new ArrayBuffer(8));
+                function _decodeInternalRustPtr(val) {
+                    if (typeof(val) === 'bigint') {
+                        __wbindgen_internal_rust_ptr_view.setBigUint64(0, BigInt.asUintN(64, val), true);
+                        return __wbindgen_internal_rust_ptr_view.getFloat64(0, true);
+                    }
+                    return Number(val);
+                }
+                "
+                .into()
+            },
+        );
+        "_decodeInternalRustPtr".to_string()
+    }
+
     fn expose_assert_non_null(&mut self) {
         let body = if self.memory64 {
             "

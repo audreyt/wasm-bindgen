@@ -46,6 +46,7 @@ pub enum Descriptor {
     Result(Box<Descriptor>),
     Unit,
     NonNull,
+    RawPointer,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -154,6 +155,7 @@ impl Descriptor {
             UNIT => Descriptor::Unit,
             CLAMPED => Descriptor::_decode(data, true),
             NONNULL => Descriptor::NonNull,
+            RAW_POINTER => Descriptor::RawPointer,
             other => panic!("unknown descriptor: {other}"),
         }
     }

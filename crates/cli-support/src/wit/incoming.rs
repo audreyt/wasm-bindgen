@@ -91,6 +91,13 @@ impl InstructionBuilder<'_, '_> {
             Descriptor::I64AsF64 | Descriptor::U64AsF64 => {
                 self.number_f64(AdapterType::F64);
             }
+            Descriptor::RawPointer => {
+                if self.cx.memory64() {
+                    self.number_f64(AdapterType::F64);
+                } else {
+                    self.number_i32(AdapterType::U32);
+                }
+            }
             Descriptor::I128 => {
                 self.instruction(
                     &[AdapterType::S128],
@@ -403,6 +410,17 @@ impl InstructionBuilder<'_, '_> {
                     Instruction::I32FromOptionNonNull,
                     &[ptr_ty],
                 )
+            }
+            Descriptor::RawPointer => {
+                if self.cx.memory64() {
+                    self.instruction(
+                        &[AdapterType::U64.option()],
+                        Instruction::FromOptionNative { ty: ValType::I64 },
+                        &[AdapterType::I32, AdapterType::I64],
+                    );
+                } else {
+                    self.in_option_sentinel64_number();
+                }
             }
 
             _ => bail!(
