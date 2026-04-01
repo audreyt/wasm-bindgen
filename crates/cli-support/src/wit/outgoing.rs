@@ -6,6 +6,14 @@ use anyhow::{bail, format_err, Error};
 use walrus::{ExportId, ValType};
 use wasm_bindgen_shared::identifier::to_valid_ident;
 
+fn closure_word_descriptor(memory64: bool) -> Descriptor {
+    if memory64 {
+        Descriptor::I64AsF64
+    } else {
+        Descriptor::I32
+    }
+}
+
 impl InstructionBuilder<'_, '_> {
     /// Processes one more `Descriptor` as an argument to a JS function that
     /// Wasm is calling.
@@ -292,15 +300,12 @@ impl InstructionBuilder<'_, '_> {
         owned_closure: Option<bool>,
     ) -> Result<(), Error> {
         let mut descriptor = descriptor.clone();
-        // synthesize the a/b arguments that aren't present in the
+        // Synthesize the a/b arguments that aren't present in the
         // signature from wasm-bindgen but are present in the Wasm file.
-        // On wasm64, closure data pointers are i64-sized.
+        // On wasm64 these are internal `WasmWord`s, which use the JS-number
+        // ABI instead of the public bigint ABI.
         let nargs = descriptor.arguments.len();
-        let ptr_descriptor = if self.cx.memory64() {
-            Descriptor::I64
-        } else {
-            Descriptor::I32
-        };
+        let ptr_descriptor = closure_word_descriptor(self.cx.memory64());
         descriptor.arguments.insert(0, ptr_descriptor.clone());
         descriptor.arguments.insert(0, ptr_descriptor);
         let shim = self.export_table_element(descriptor.shim_idx);
@@ -700,4 +705,10 @@ impl InstructionBuilder<'_, '_> {
             &[ty.option()],
         );
     }
+}
+
+#[test]
+fn closure_word_descriptor_uses_number_abi_on_memory64() {
+    assert_eq!(closure_word_descriptor(true), Descriptor::I64AsF64);
+    assert_eq!(closure_word_descriptor(false), Descriptor::I32);
 }
