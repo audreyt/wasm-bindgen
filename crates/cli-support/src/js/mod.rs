@@ -380,9 +380,11 @@ impl<'a> Context<'a> {
 
     /// Allocates `size_expr` bytes with `malloc` and returns a JS pointer.
     fn malloc_ptr(&self, size_expr: &str, align: usize) -> String {
-        let size = self.to_wasm_bigint(size_expr);
-        let align = self.usize_literal(align);
-        self.to_js_ptr_inline(&format!("malloc({size}, {align})"))
+        if self.memory64 {
+            format!("malloc({size_expr}, {align})")
+        } else {
+            format!("malloc({size_expr}, {align}) >>> 0")
+        }
     }
 
     /// Reallocates `ptr_expr` with `realloc` and returns a JS pointer.
@@ -393,11 +395,11 @@ impl<'a> Context<'a> {
         new_size_expr: &str,
         align: usize,
     ) -> String {
-        let ptr = self.to_wasm_bigint(ptr_expr);
-        let old_size = self.to_wasm_bigint(old_size_expr);
-        let new_size = self.to_wasm_bigint(new_size_expr);
-        let align = self.usize_literal(align);
-        self.to_js_ptr_inline(&format!("realloc({ptr}, {old_size}, {new_size}, {align})"))
+        if self.memory64 {
+            format!("realloc({ptr_expr}, {old_size_expr}, {new_size_expr}, {align})")
+        } else {
+            format!("realloc({ptr_expr}, {old_size_expr}, {new_size_expr}, {align}) >>> 0")
+        }
     }
 
     /// Writes an ExportDefinition to global and typescript buffers.
@@ -1669,7 +1671,11 @@ if (require('worker_threads').isMainThread) {{
                 ("obj.__wbg_ptr = ptr;", "obj.__wbg_ptr")
             };
 
-            let ptr_fixup = format!("ptr = {};", self.to_js_ptr_inline("ptr"));
+            let ptr_fixup = if self.memory64 {
+                String::new()
+            } else {
+                "ptr = ptr >>> 0;".to_string()
+            };
             dst.push_str(&format!(
                 "\
                 static __wrap(ptr) {{
@@ -1698,7 +1704,7 @@ if (require('worker_threads').isMainThread) {{
         }
 
         let free_fn = wasm_bindgen_shared::free_function(qualified);
-        let free_ptr = self.to_js_ptr_inline("ptr");
+        let free_ptr = if self.memory64 { "ptr" } else { "ptr >>> 0" };
         let finalization_callback = if self.config.generate_reset_state {
             format!(
                 "({{ ptr, instance }}) => {{
@@ -2219,7 +2225,6 @@ if (require('worker_threads').isMainThread) {{
             let malloc_len = self.malloc_ptr("len", 1);
             let realloc_grow = self.realloc_ptr("ptr", "len", "len = offset + arg.length * 3", 1);
             let realloc_shrink = self.realloc_ptr("ptr", "len", "offset", 1);
-
             let encode_as_ascii = format!(
                 "\
                 if (realloc === undefined) {{

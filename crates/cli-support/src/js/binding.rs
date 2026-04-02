@@ -119,6 +119,13 @@ pub fn maybe_wrap_try_catch(call: &str, should_check_aborted: bool) -> String {
 
 const F64_OPTION_SENTINEL: &str = "Number.MAX_SAFE_INTEGER";
 
+fn js_zero_literal_for_val_type(ty: ValType) -> &'static str {
+    match ty {
+        ValType::I64 => "0n",
+        _ => "0",
+    }
+}
+
 impl<'a, 'b> Builder<'a, 'b> {
     pub fn new(cx: &'a mut Context<'b>) -> Builder<'a, 'b> {
         Builder {
@@ -904,17 +911,27 @@ fn instruction(
             let mut args = Vec::new();
             let tmp = js.tmp();
             if invoc.defer() {
-                let deferred_init = format!("0{}", js.cx.wasm_bigint_suffix());
                 if let Instruction::DeferFree { .. } = instr {
                     // Ignore `free`'s final `align` argument, since that's manually inserted later.
                     params -= 1;
                 }
+                let deferred_inits = match &invoc {
+                    Invocation::Core { id, .. } => {
+                        let ty = js.cx.module.funcs.get(*id).ty();
+                        let ty = js.cx.module.types.get(ty);
+                        ty.params()[..params]
+                            .iter()
+                            .map(|ty| js_zero_literal_for_val_type(*ty))
+                            .collect::<Vec<_>>()
+                    }
+                    Invocation::Adapter(_) => unreachable!(),
+                };
                 // If the call is deferred, the arguments to the function still need to be
                 // accessible in the `finally` block, so we declare variables to hold the args
                 // outside of the try-finally block and then set those to the args.
                 for (i, arg) in js.stack[js.stack.len() - params..].iter().enumerate() {
                     let name = format!("deferred{tmp}_{i}");
-                    writeln!(js.pre_try, "let {name} = {deferred_init};").unwrap();
+                    writeln!(js.pre_try, "let {name} = {};", deferred_inits[i]).unwrap();
                     writeln!(js.prelude, "{name} = {arg};").unwrap();
                     args.push(name);
                 }
@@ -1539,10 +1556,7 @@ fn instruction(
 
             if *owned {
                 let free = js.cx.export_name_of(*free);
-                let one = js.size_literal(1);
-                js.prelude(&format!(
-                    "if ({ptr}) {{ wasm.{free}({ptr}, {len}, {one}); }}",
-                ));
+                js.prelude(&format!("if ({ptr}) {{ wasm.{free}({ptr}, {len}, 1); }}",));
             }
 
             js.push(format!("v{tmp}"));
@@ -1640,14 +1654,8 @@ fn instruction(
             let i = js.tmp();
             let free = js.cx.export_name_of(*free);
             js.prelude(&format!("var v{i} = {f}({ptr}, {len}).slice();"));
-            let size = js.size_literal(kind.size());
-            let free_ptr = if js.cx.memory64 {
-                js.coerce_raw_ptr(&ptr)
-            } else {
-                ptr.clone()
-            };
-            let free_len = format!("{} * {size}", js.cx.to_wasm_bigint(&len));
-            js.prelude(&format!("wasm.{free}({free_ptr}, {free_len}, {size});"));
+            let size = kind.size();
+            js.prelude(&format!("wasm.{free}({ptr}, {len} * {size}, {size});"));
             js.push(format!("v{i}"))
         }
 
@@ -1660,14 +1668,8 @@ fn instruction(
             js.prelude(&format!("let v{i};"));
             js.prelude(&format!("if ({ptr}) {{"));
             js.prelude(&format!("v{i} = {f}({ptr}, {len}).slice();"));
-            let size = js.size_literal(kind.size());
-            let free_ptr = if js.cx.memory64 {
-                js.coerce_raw_ptr(&ptr)
-            } else {
-                ptr.clone()
-            };
-            let free_len = format!("{} * {size}", js.cx.to_wasm_bigint(&len));
-            js.prelude(&format!("wasm.{free}({free_ptr}, {free_len}, {size});"));
+            let size = kind.size();
+            js.prelude(&format!("wasm.{free}({ptr}, {len} * {size}, {size});"));
             js.prelude("}");
             js.push(format!("v{i}"));
         }
@@ -1934,4 +1936,11 @@ fn adapter2ts(
         }
         AdapterType::Function => dst.push_str("any"),
     }
+}
+
+#[test]
+fn js_zero_literal_matches_wasm_value_kind() {
+    assert_eq!(js_zero_literal_for_val_type(ValType::I32), "0");
+    assert_eq!(js_zero_literal_for_val_type(ValType::F64), "0");
+    assert_eq!(js_zero_literal_for_val_type(ValType::I64), "0n");
 }

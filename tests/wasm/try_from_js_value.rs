@@ -66,11 +66,7 @@ fn u64_try_from_js_value() {
         u64::try_from_js_value(JsValue::from(u64::MAX)),
         Ok(u64::MAX)
     );
-    if cfg!(target_arch = "wasm64") {
-        assert_eq!(u64::try_from_js_value(JsValue::from_f64(42.0)), Ok(42));
-    } else {
-        assert!(u64::try_from_js_value(JsValue::from_f64(42.0)).is_err());
-    }
+    assert!(u64::try_from_js_value(JsValue::from_f64(42.0)).is_err());
     assert!(u64::try_from_js_value(JsValue::TRUE).is_err());
     assert!(u64::try_from_js_value(JsValue::from_str("45")).is_err());
     assert!(u64::try_from_js_value(JsValue::NULL).is_err());
@@ -344,13 +340,8 @@ fn numeric_types_reject_invalid_js_values() {
     assert!(f32::try_from_js_value(JsValue::NULL).is_err());
     assert!(f64::try_from_js_value(JsValue::NULL).is_err());
 
-    if cfg!(target_arch = "wasm64") {
-        assert_eq!(i64::try_from_js_value(JsValue::from_f64(0.0)), Ok(0));
-        assert_eq!(i64::try_from_js_value(JsValue::from_f64(25.0)), Ok(25));
-    } else {
-        assert!(i64::try_from_js_value(JsValue::from_f64(0.0)).is_err());
-        assert!(i64::try_from_js_value(JsValue::from_f64(25.0)).is_err());
-    }
+    assert!(i64::try_from_js_value(JsValue::from_f64(0.0)).is_err());
+    assert!(i64::try_from_js_value(JsValue::from_f64(25.0)).is_err());
 
     assert!(i8::try_from_js_value(JsValue::from_str("0")).is_err());
     assert!(i8::try_from_js_value(JsValue::from_str("25")).is_err());

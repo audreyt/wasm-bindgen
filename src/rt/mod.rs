@@ -668,16 +668,18 @@ impl<T: ?Sized> BorrowMut<T> for RcRefMut<T> {
 }
 
 #[no_mangle]
-pub extern "C" fn __wbindgen_malloc(size: usize, align: usize) -> *mut u8 {
+pub extern "C" fn __wbindgen_malloc(size: WasmWord, align: WasmWord) -> WasmPtr<u8> {
+    let size = size.into_usize();
+    let align = align.into_usize();
     if let Ok(layout) = Layout::from_size_align(size, align) {
         unsafe {
             if layout.size() > 0 {
                 let ptr = alloc(layout);
                 if !ptr.is_null() {
-                    return ptr;
+                    return WasmPtr::from_ptr(ptr);
                 }
             } else {
-                return align as *mut u8;
+                return WasmPtr::from_usize(align);
             }
         }
     }
@@ -687,17 +689,21 @@ pub extern "C" fn __wbindgen_malloc(size: usize, align: usize) -> *mut u8 {
 
 #[no_mangle]
 pub unsafe extern "C" fn __wbindgen_realloc(
-    ptr: *mut u8,
-    old_size: usize,
-    new_size: usize,
-    align: usize,
-) -> *mut u8 {
+    ptr: WasmPtr<u8>,
+    old_size: WasmWord,
+    new_size: WasmWord,
+    align: WasmWord,
+) -> WasmPtr<u8> {
+    let ptr = ptr.into_ptr();
+    let old_size = old_size.into_usize();
+    let new_size = new_size.into_usize();
+    let align = align.into_usize();
     debug_assert!(old_size > 0);
     debug_assert!(new_size > 0);
     if let Ok(layout) = Layout::from_size_align(old_size, align) {
         let ptr = realloc(ptr, layout, new_size);
         if !ptr.is_null() {
-            return ptr;
+            return WasmPtr::from_ptr(ptr);
         }
     }
     malloc_failure();
@@ -722,12 +728,15 @@ fn malloc_failure() -> ! {
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn __wbindgen_free(ptr: *mut u8, size: usize, align: usize) {
+pub unsafe extern "C" fn __wbindgen_free(ptr: WasmPtr<u8>, size: WasmWord, align: WasmWord) {
+    let size = size.into_usize();
     // This happens for zero-length slices, and in that case `ptr` is
     // likely bogus so don't actually send this to the system allocator
     if size == 0 {
         return;
     }
+    let ptr = ptr.into_ptr();
+    let align = align.into_usize();
     let layout = Layout::from_size_align_unchecked(size, align);
     dealloc(ptr, layout);
 }
