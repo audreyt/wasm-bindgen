@@ -378,30 +378,6 @@ impl<'a> Context<'a> {
         self.to_js_ptr(&format!("wasm.__wbindgen_add_to_stack_pointer({offset})"))
     }
 
-    /// Allocates `size_expr` bytes with `malloc` and returns a JS pointer.
-    fn malloc_ptr(&self, size_expr: &str, align: usize) -> String {
-        if self.memory64 {
-            format!("malloc({size_expr}, {align})")
-        } else {
-            format!("malloc({size_expr}, {align}) >>> 0")
-        }
-    }
-
-    /// Reallocates `ptr_expr` with `realloc` and returns a JS pointer.
-    fn realloc_ptr(
-        &self,
-        ptr_expr: &str,
-        old_size_expr: &str,
-        new_size_expr: &str,
-        align: usize,
-    ) -> String {
-        if self.memory64 {
-            format!("realloc({ptr_expr}, {old_size_expr}, {new_size_expr}, {align})")
-        } else {
-            format!("realloc({ptr_expr}, {old_size_expr}, {new_size_expr}, {align}) >>> 0")
-        }
-    }
-
     /// Writes an ExportDefinition to global and typescript buffers.
     /// Handles realising for invalid identifier export names.
     /// define_only used when only locally declared but not explicitly exported.
@@ -2221,10 +2197,26 @@ if (require('worker_threads').isMainThread) {{
             } else {
                 ""
             };
-            let malloc_buf = self.malloc_ptr("buf.length", 1);
-            let malloc_len = self.malloc_ptr("len", 1);
-            let realloc_grow = self.realloc_ptr("ptr", "len", "len = offset + arg.length * 3", 1);
-            let realloc_shrink = self.realloc_ptr("ptr", "len", "offset", 1);
+            let malloc_buf = if self.memory64 {
+                "malloc(buf.length, 1)"
+            } else {
+                "malloc(buf.length, 1) >>> 0"
+            };
+            let malloc_len = if self.memory64 {
+                "malloc(len, 1)"
+            } else {
+                "malloc(len, 1) >>> 0"
+            };
+            let realloc_grow = if self.memory64 {
+                "realloc(ptr, len, len = offset + arg.length * 3, 1)"
+            } else {
+                "realloc(ptr, len, len = offset + arg.length * 3, 1) >>> 0"
+            };
+            let realloc_shrink = if self.memory64 {
+                "realloc(ptr, len, offset, 1)"
+            } else {
+                "realloc(ptr, len, offset, 1) >>> 0"
+            };
             let encode_as_ascii = format!(
                 "\
                 if (realloc === undefined) {{
@@ -2336,7 +2328,11 @@ if (require('worker_threads').isMainThread) {{
                 }
 
                 self.intrinsic(ret.to_string().into(), None, {
-                    let malloc_expr = self.malloc_ptr("array.length * 4", 4);
+                    let malloc_expr = if self.memory64 {
+                        "malloc(array.length * 4, 4)"
+                    } else {
+                        "malloc(array.length * 4, 4) >>> 0"
+                    };
                     format!(
                         "
                         function {ret}(array, malloc) {{
@@ -2356,7 +2352,11 @@ if (require('worker_threads').isMainThread) {{
             _ => {
                 self.expose_add_heap_object();
                 self.intrinsic(ret.to_string().into(), None, {
-                    let malloc_expr = self.malloc_ptr("array.length * 4", 4);
+                    let malloc_expr = if self.memory64 {
+                        "malloc(array.length * 4, 4)"
+                    } else {
+                        "malloc(array.length * 4, 4) >>> 0"
+                    };
                     format!(
                         "
                         function {ret}(array, malloc) {{
@@ -2384,7 +2384,11 @@ if (require('worker_threads').isMainThread) {{
         };
         self.expose_wasm_vector_len();
         self.intrinsic(ret.to_string().into(), None, {
-            let malloc_expr = self.malloc_ptr(&format!("arg.length * {size}"), size);
+            let malloc_expr = if self.memory64 {
+                format!("malloc(arg.length * {size}, {size})")
+            } else {
+                format!("malloc(arg.length * {size}, {size}) >>> 0")
+            };
             format!(
                 "
                 function {ret}(arg, malloc) {{
