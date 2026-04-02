@@ -282,12 +282,9 @@ pub fn assert_not_null<T>(s: *mut T) {
     }
 }
 
-#[cfg(target_arch = "wasm64")]
-type WasmWordRepr = f64;
-#[cfg(not(target_arch = "wasm64"))]
 type WasmWordRepr = usize;
 
-/// A single pointer-sized machine word using the JS-number ABI on wasm64.
+/// A single pointer-sized machine word.
 #[repr(transparent)]
 #[derive(Copy, Clone, Default)]
 pub struct WasmWord(WasmWordRepr);
@@ -295,62 +292,27 @@ pub struct WasmWord(WasmWordRepr);
 impl WasmWord {
     #[inline]
     pub fn from_usize(value: usize) -> Self {
-        #[cfg(target_arch = "wasm64")]
-        {
-            Self(value as f64)
-        }
-        #[cfg(not(target_arch = "wasm64"))]
-        {
-            Self(value)
-        }
+        Self(value)
     }
 
     #[inline]
     pub fn into_usize(self) -> usize {
-        #[cfg(target_arch = "wasm64")]
-        {
-            self.0 as usize
-        }
-        #[cfg(not(target_arch = "wasm64"))]
-        {
-            self.0
-        }
+        self.0
     }
 
     #[inline]
     pub fn from_isize(value: isize) -> Self {
-        #[cfg(target_arch = "wasm64")]
-        {
-            Self(value as f64)
-        }
-        #[cfg(not(target_arch = "wasm64"))]
-        {
-            Self(value as usize)
-        }
+        Self(value as usize)
     }
 
     #[inline]
     pub fn into_isize(self) -> isize {
-        #[cfg(target_arch = "wasm64")]
-        {
-            self.0 as isize
-        }
-        #[cfg(not(target_arch = "wasm64"))]
-        {
-            self.0 as isize
-        }
+        self.0 as isize
     }
 
     #[inline]
     pub fn is_zero(&self) -> bool {
-        #[cfg(target_arch = "wasm64")]
-        {
-            self.0 == 0.0
-        }
-        #[cfg(not(target_arch = "wasm64"))]
-        {
-            self.0 == 0
-        }
+        self.0 == 0
     }
 }
 
@@ -371,7 +333,7 @@ impl WasmAbi for WasmWord {
     }
 }
 
-/// A typed raw pointer using the JS-number ABI on wasm64.
+/// A typed raw pointer using the platform pointer-sized representation.
 #[repr(transparent)]
 #[derive(Copy, Clone)]
 pub struct WasmPtr<T> {
@@ -438,6 +400,21 @@ impl<T> WasmAbi for WasmPtr<T> {
             word: WasmWord::join(prim1, (), (), ()),
             _marker: PhantomData,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::WasmWord;
+
+    #[cfg(target_pointer_width = "64")]
+    #[test]
+    fn wasm_word_roundtrips_large_pointer_values() {
+        let value = 1usize << 60;
+        assert_eq!(WasmWord::from_usize(value).into_usize(), value);
+
+        let signed = -(1isize << 40);
+        assert_eq!(WasmWord::from_isize(signed).into_isize(), signed);
     }
 }
 

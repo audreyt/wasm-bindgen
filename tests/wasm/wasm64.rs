@@ -6,6 +6,7 @@
 
 #![cfg(test)]
 
+use wasm_bindgen::__rt::WasmWord;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_test::*;
 
@@ -90,6 +91,15 @@ fn test_usize_roundtrip() {
     // Verify that usize values larger than u32::MAX work correctly
     let large_val: usize = 0x1_0000_0001;
     assert_eq!(large_val as u64, 4294967297u64);
+}
+
+#[wasm_bindgen_test]
+fn test_wasm_word_roundtrip() {
+    let large_word = 1usize << 60;
+    assert_eq!(WasmWord::from_usize(large_word).into_usize(), large_word);
+
+    let signed_word = -(1isize << 40);
+    assert_eq!(WasmWord::from_isize(signed_word).into_isize(), signed_word);
 }
 
 #[wasm_bindgen_test]

@@ -74,13 +74,9 @@ struct Cli {
 }
 
 impl Cli {
-    fn get_args(&self, tests: &Tests, uses_memory64: bool) -> String {
+    fn get_args(&self, tests: &Tests) -> String {
         let include_ignored = self.include_ignored;
-        let filtered = if uses_memory64 {
-            format!("{}n", tests.filtered)
-        } else {
-            tests.filtered.to_string()
-        };
+        let filtered = tests.filtered;
 
         format!(
             r#"
@@ -388,16 +384,10 @@ fn rmain(cli: Cli) -> anyhow::Result<()> {
     shell.clear();
 
     match test_mode {
-        TestMode::Node { no_modules } => node::execute(
-            module,
-            &tmpdir_path,
-            cli,
-            tests,
-            uses_memory64,
-            !no_modules,
-            benchmark,
-        )?,
-        TestMode::Deno => deno::execute(module, &tmpdir_path, cli, tests, uses_memory64)?,
+        TestMode::Node { no_modules } => {
+            node::execute(module, &tmpdir_path, cli, tests, !no_modules, benchmark)?
+        }
+        TestMode::Deno => deno::execute(module, &tmpdir_path, cli, tests)?,
         TestMode::Emscripten => {
             let srv = server::spawn_emscripten(
                 &if headless {
@@ -452,7 +442,6 @@ fn rmain(cli: Cli) -> anyhow::Result<()> {
                 tests,
                 test_mode,
                 std::env::var("WASM_BINDGEN_TEST_NO_ORIGIN_ISOLATION").is_err(),
-                uses_memory64,
                 benchmark,
             )
             .context("failed to spawn server")?;
@@ -564,6 +553,42 @@ impl TestMode {
             TestMode::ServiceWorker { .. } => "WASM_BINDGEN_USE_SERVICE_WORKER",
             TestMode::Emscripten => "WASM_BINDGEN_USE_EMSCRIPTEN",
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Cli, Tests};
+    use std::path::PathBuf;
+
+    fn cli() -> Cli {
+        Cli {
+            file: PathBuf::from("test.wasm"),
+            bench: false,
+            include_ignored: true,
+            ignored: false,
+            exact: false,
+            skip: Vec::new(),
+            list: false,
+            nocapture: false,
+            format: None,
+            filter: None,
+        }
+    }
+
+    #[test]
+    fn runner_args_keep_filtered_count_on_number_abi() {
+        let cli = cli();
+        let tests = Tests {
+            tests: Vec::new(),
+            filtered: 3,
+        };
+
+        let args = cli.get_args(&tests);
+
+        assert!(args.contains("cx.include_ignored(true);"));
+        assert!(args.contains("cx.filtered_count(3);"));
+        assert!(!args.contains("3n"));
     }
 }
 

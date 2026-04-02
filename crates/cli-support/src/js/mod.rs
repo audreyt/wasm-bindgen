@@ -38,6 +38,18 @@ macro_rules! region {
     };
 }
 
+const RAW_WASM_PTR_PREFIX: &str = "/*__wbg_raw_ptr__*/(";
+const RAW_WASM_PTR_SUFFIX: &str = ")";
+
+pub(crate) fn raw_wasm_ptr_expr(expr: &str) -> String {
+    format!("{RAW_WASM_PTR_PREFIX}{expr}{RAW_WASM_PTR_SUFFIX}")
+}
+
+pub(crate) fn strip_raw_wasm_ptr_expr(expr: &str) -> Option<&str> {
+    expr.strip_prefix(RAW_WASM_PTR_PREFIX)
+        .and_then(|expr| expr.strip_suffix(RAW_WASM_PTR_SUFFIX))
+}
+
 pub struct Context<'a> {
     globals: String,
     intrinsics: Option<BTreeMap<Cow<'static, str>, Cow<'static, str>>>,
@@ -307,6 +319,9 @@ impl<'a> Context<'a> {
 
     /// Wraps an expression with `BigInt()` for memory64.
     fn to_wasm_bigint(&self, expr: &str) -> String {
+        if let Some(expr) = strip_raw_wasm_ptr_expr(expr) {
+            return expr.to_string();
+        }
         if self.memory64 {
             format!("BigInt({expr})")
         } else {
@@ -316,6 +331,9 @@ impl<'a> Context<'a> {
 
     /// Coerce a JS pointer-sized expression into the Wasm ABI representation.
     fn to_wasm_ptr(&self, expr: &str) -> String {
+        if let Some(expr) = strip_raw_wasm_ptr_expr(expr) {
+            return expr.to_string();
+        }
         if self.memory64 {
             format!("BigInt({expr})")
         } else {
@@ -1635,27 +1653,50 @@ if (require('worker_threads').isMainThread) {{
         }
 
         if class.wrap_needed {
-            let (ptr_assignment, register_data) = if self.config.generate_reset_state {
+            let (ptr_prelude, ptr_assignment, register_data) = if self.memory64 {
+                if self.config.generate_reset_state {
+                    (
+                        "const rawPtr = ptr; ptr = Number(ptr);".to_string(),
+                        "\
+                        obj.__wbg_ptr = ptr;
+                        Object.defineProperty(obj, '__wbg_ptr_raw', { value: rawPtr, writable: true });
+                        obj.__wbg_inst = __wbg_instance_id;
+                        "
+                        .to_string(),
+                        "{ ptr: rawPtr, instance: __wbg_instance_id }".to_string(),
+                    )
+                } else {
+                    (
+                        "const rawPtr = ptr; ptr = Number(ptr);".to_string(),
+                        "\
+                        obj.__wbg_ptr = ptr;
+                        Object.defineProperty(obj, '__wbg_ptr_raw', { value: rawPtr, writable: true });
+                        "
+                        .to_string(),
+                        "obj.__wbg_ptr_raw".to_string(),
+                    )
+                }
+            } else if self.config.generate_reset_state {
                 (
+                    self.wasm_ptr_fixup_stmt("ptr"),
                     "\
                     obj.__wbg_ptr = ptr;
                     obj.__wbg_inst = __wbg_instance_id;
-                    ",
-                    "{ ptr, instance: __wbg_instance_id }",
+                    "
+                    .to_string(),
+                    "{ ptr, instance: __wbg_instance_id }".to_string(),
                 )
             } else {
-                ("obj.__wbg_ptr = ptr;", "obj.__wbg_ptr")
-            };
-
-            let ptr_fixup = if self.memory64 {
-                String::new()
-            } else {
-                "ptr = ptr >>> 0;".to_string()
+                (
+                    self.wasm_ptr_fixup_stmt("ptr"),
+                    "obj.__wbg_ptr = ptr;".to_string(),
+                    "obj.__wbg_ptr".to_string(),
+                )
             };
             dst.push_str(&format!(
                 "\
                 static __wrap(ptr) {{
-                    {ptr_fixup}
+                    {ptr_prelude}
                     const obj = Object.create({identifier}.prototype);
                     {ptr_assignment}
                     {identifier}Finalization.register(obj, {register_data}, obj);
@@ -1666,11 +1707,12 @@ if (require('worker_threads').isMainThread) {{
         }
 
         if class.unwrap_needed {
+            let zero = self.usize_literal(0);
             dst.push_str(&format!(
                 "\
                 static __unwrap(jsValue) {{
                     if (!(jsValue instanceof {identifier})) {{
-                        return 0;
+                        return {zero};
                     }}
 
                     return jsValue.__destroy_into_raw();
@@ -1680,15 +1722,19 @@ if (require('worker_threads').isMainThread) {{
         }
 
         let free_fn = wasm_bindgen_shared::free_function(qualified);
-        let free_ptr = if self.memory64 { "ptr" } else { "ptr >>> 0" };
+        let finalization_free_ptr = if self.memory64 {
+            self.to_wasm_ptr("ptr")
+        } else {
+            "ptr >>> 0".to_string()
+        };
         let finalization_callback = if self.config.generate_reset_state {
             format!(
                 "({{ ptr, instance }}) => {{
-                    if (instance === __wbg_instance_id) wasm.{free_fn}({free_ptr}, 1);
+                    if (instance === __wbg_instance_id) wasm.{free_fn}({finalization_free_ptr}, 1);
                 }}"
             )
         } else {
-            format!("ptr => wasm.{free_fn}({free_ptr}, 1)")
+            format!("ptr => wasm.{free_fn}({finalization_free_ptr}, 1)")
         };
 
         self.globals.push_str(&format!(
@@ -1753,15 +1799,34 @@ if (require('worker_threads').isMainThread) {{
             }
         }
 
-        let mut free = format!("wasm.{free_fn}(ptr, 0)");
+        let free_method_ptr = if self.memory64 {
+            self.to_wasm_ptr("ptr")
+        } else {
+            "ptr".to_string()
+        };
+        let mut free = format!("wasm.{free_fn}({free_method_ptr}, 0)");
         free = binding::maybe_wrap_try_catch(&free, self.aux.wrapped_js_tag.is_some());
+        let destroy_into_raw = if self.memory64 {
+            format!(
+                "const ptr = this.__wbg_ptr_raw;
+                this.__wbg_ptr = 0;
+                this.__wbg_ptr_raw = {};
+                {identifier}Finalization.unregister(this);
+                return ptr;",
+                self.usize_literal(0)
+            )
+        } else {
+            format!(
+                "const ptr = this.__wbg_ptr;
+                this.__wbg_ptr = 0;
+                {identifier}Finalization.unregister(this);
+                return ptr;"
+            )
+        };
         dst.push_str(&format!(
             "\
             __destroy_into_raw() {{
-                const ptr = this.__wbg_ptr;
-                this.__wbg_ptr = 0;
-                {identifier}Finalization.unregister(this);
-                return ptr;
+                {destroy_into_raw}
             }}
             free() {{
                 const ptr = this.__destroy_into_raw();
@@ -2197,38 +2262,52 @@ if (require('worker_threads').isMainThread) {{
             } else {
                 ""
             };
+            let align = self.usize_literal(1);
             let malloc_buf = if self.memory64 {
-                "malloc(buf.length, 1)"
+                format!(
+                    "const raw_ptr = malloc(BigInt(buf.length), {align});
+                    const ptr = Number(raw_ptr);"
+                )
             } else {
-                "malloc(buf.length, 1) >>> 0"
+                "const ptr = malloc(buf.length, 1) >>> 0;".to_string()
             };
             let malloc_len = if self.memory64 {
-                "malloc(len, 1)"
+                format!(
+                    "let raw_ptr = malloc(BigInt(len), {align});
+                let ptr = Number(raw_ptr);"
+                )
             } else {
-                "malloc(len, 1) >>> 0"
+                "let ptr = malloc(len, 1) >>> 0;".to_string()
             };
             let realloc_grow = if self.memory64 {
-                "realloc(ptr, len, len = offset + arg.length * 3, 1)"
+                format!(
+                    "raw_ptr = realloc(raw_ptr, BigInt(len), BigInt(len = offset + arg.length * 3), {align});
+                        ptr = Number(raw_ptr);"
+                )
             } else {
-                "realloc(ptr, len, len = offset + arg.length * 3, 1) >>> 0"
+                "ptr = realloc(ptr, len, len = offset + arg.length * 3, 1) >>> 0;".to_string()
             };
             let realloc_shrink = if self.memory64 {
-                "realloc(ptr, len, offset, 1)"
+                format!(
+                    "raw_ptr = realloc(raw_ptr, BigInt(len), BigInt(offset), {align});
+                        ptr = Number(raw_ptr);"
+                )
             } else {
-                "realloc(ptr, len, offset, 1) >>> 0"
+                "ptr = realloc(ptr, len, offset, 1) >>> 0;".to_string()
             };
+            let return_ptr = if self.memory64 { "raw_ptr" } else { "ptr" };
             let encode_as_ascii = format!(
                 "\
                 if (realloc === undefined) {{
                     const buf = cachedTextEncoder.encode(arg);
-                    const ptr = {malloc_buf};
+                    {malloc_buf}
                     {mem_formatted}.subarray(ptr, ptr + buf.length).set(buf);
                     WASM_VECTOR_LEN = buf.length;
-                    return ptr;
+                    return {return_ptr};
                 }}
 
                 let len = arg.length;
-                let ptr = {malloc_len};
+                {malloc_len}
 
                 const mem = {mem_formatted};
 
@@ -2249,16 +2328,16 @@ if (require('worker_threads').isMainThread) {{
                         if (offset !== 0) {{
                             arg = arg.slice(offset);
                         }}
-                        ptr = {realloc_grow};
+                        {realloc_grow}
                         const view = {mem_formatted}.subarray(ptr + offset, ptr + len);
                         const ret = cachedTextEncoder.encodeInto(arg, view);
                         {debug_end}
                         offset += ret.written;
-                        ptr = {realloc_shrink};
+                        {realloc_shrink}
                     }}
 
                     WASM_VECTOR_LEN = offset;
-                    return ptr;
+                    return {return_ptr};
                 }}
                 ",
             );
@@ -2328,21 +2407,31 @@ if (require('worker_threads').isMainThread) {{
                 }
 
                 self.intrinsic(ret.to_string().into(), None, {
-                    let malloc_expr = if self.memory64 {
-                        "malloc(array.length * 4, 4)"
+                    let align = self.usize_literal(4);
+                    let (malloc_stmt, ret_ptr) = if self.memory64 {
+                        (
+                            format!(
+                                "const raw_ptr = malloc(BigInt(array.length * 4), {align});
+                            const ptr = Number(raw_ptr);"
+                            ),
+                            "raw_ptr",
+                        )
                     } else {
-                        "malloc(array.length * 4, 4) >>> 0"
+                        (
+                            "const ptr = malloc(array.length * 4, 4) >>> 0;".to_string(),
+                            "ptr",
+                        )
                     };
                     format!(
                         "
                         function {ret}(array, malloc) {{
-                            const ptr = {malloc_expr};
+                            {malloc_stmt}
                             for (let i = 0; i < array.length; i++) {{
                                 const add = {add}(array[i]);
                                 {mem_formatted}.setUint32(ptr + 4 * i, add, true);
                             }}
                             WASM_VECTOR_LEN = array.length;
-                            return ptr;
+                            return {ret_ptr};
                         }}
                     "
                     )
@@ -2352,21 +2441,31 @@ if (require('worker_threads').isMainThread) {{
             _ => {
                 self.expose_add_heap_object();
                 self.intrinsic(ret.to_string().into(), None, {
-                    let malloc_expr = if self.memory64 {
-                        "malloc(array.length * 4, 4)"
+                    let align = self.usize_literal(4);
+                    let (malloc_stmt, ret_ptr) = if self.memory64 {
+                        (
+                            format!(
+                                "const raw_ptr = malloc(BigInt(array.length * 4), {align});
+                            const ptr = Number(raw_ptr);"
+                            ),
+                            "raw_ptr",
+                        )
                     } else {
-                        "malloc(array.length * 4, 4) >>> 0"
+                        (
+                            "const ptr = malloc(array.length * 4, 4) >>> 0;".to_string(),
+                            "ptr",
+                        )
                     };
                     format!(
                         "
                         function {ret}(array, malloc) {{
-                            const ptr = {malloc_expr};
+                            {malloc_stmt}
                             const mem = {mem_formatted};
                             for (let i = 0; i < array.length; i++) {{
                                 mem.setUint32(ptr + 4 * i, addHeapObject(array[i]), true);
                             }}
                             WASM_VECTOR_LEN = array.length;
-                            return ptr;
+                            return {ret_ptr};
                         }}
                     "
                     )
@@ -2384,18 +2483,28 @@ if (require('worker_threads').isMainThread) {{
         };
         self.expose_wasm_vector_len();
         self.intrinsic(ret.to_string().into(), None, {
-            let malloc_expr = if self.memory64 {
-                format!("malloc(arg.length * {size}, {size})")
+            let align = self.usize_literal(size);
+            let (malloc_stmt, ret_ptr) = if self.memory64 {
+                (
+                    format!(
+                        "const raw_ptr = malloc(BigInt(arg.length * {size}), {align});
+                    const ptr = Number(raw_ptr);"
+                    ),
+                    "raw_ptr",
+                )
             } else {
-                format!("malloc(arg.length * {size}, {size}) >>> 0")
+                (
+                    format!("const ptr = malloc(arg.length * {size}, {size}) >>> 0;"),
+                    "ptr",
+                )
             };
             format!(
                 "
                 function {ret}(arg, malloc) {{
-                    const ptr = {malloc_expr};
+                    {malloc_stmt}
                     {view}().set(arg, ptr / {size});
                     WASM_VECTOR_LEN = arg.length;
-                    return ptr;
+                    return {ret_ptr};
                 }}
                 "
             )
@@ -2676,16 +2785,19 @@ if (require('worker_threads').isMainThread) {{
             (Some(table), Some(drop)) => {
                 let table = self.export_name_of(table);
                 let drop = self.export_name_of(drop);
-                let drop_stmt = format!(
-                    "wasm.{drop}({}, {});",
-                    self.to_wasm_bigint("ptr"),
-                    self.to_wasm_bigint("len"),
-                );
+                let raw_words = if self.memory64 {
+                    "const rawPtr = ptr; const rawLen = len;\n                            "
+                } else {
+                    ""
+                };
+                let drop_ptr = if self.memory64 { "rawPtr" } else { "ptr" };
+                let drop_len = if self.memory64 { "rawLen" } else { "len" };
+                let drop_stmt = format!("wasm.{drop}({drop_ptr}, {drop_len});");
                 self.intrinsic(ret.to_string().into(), None, {
                     format!(
                         "
                         function {ret}(ptr, len) {{
-                            {ptr_fixup}
+                            {raw_words}{ptr_fixup}
                             const mem = {mem}();
                             const result = [];
                             for (let i = ptr; i < ptr + {stride} * len; i += {stride}) {{
@@ -3266,27 +3378,6 @@ if (require('worker_threads').isMainThread) {{
         });
     }
 
-    fn expose_decode_internal_rust_ptr(&mut self) -> String {
-        self.intrinsic(
-            "decode_internal_rust_ptr".into(),
-            "_decodeInternalRustPtr".into(),
-            {
-                "
-                const __wbindgen_internal_rust_ptr_view = new DataView(new ArrayBuffer(8));
-                function _decodeInternalRustPtr(val) {
-                    if (typeof(val) === 'bigint') {
-                        __wbindgen_internal_rust_ptr_view.setBigUint64(0, BigInt.asUintN(64, val), true);
-                        return __wbindgen_internal_rust_ptr_view.getFloat64(0, true);
-                    }
-                    return Number(val);
-                }
-                "
-                .into()
-            },
-        );
-        "_decodeInternalRustPtr".to_string()
-    }
-
     fn expose_assert_non_null(&mut self) {
         let body = if self.memory64 {
             "
@@ -3329,6 +3420,7 @@ if (require('worker_threads').isMainThread) {{
         // destroyed, then we put back the pointer so a future
         // invocation can succeed.
         self.intrinsic("make_mut_closure".into(), "makeMutClosure".into(), {
+            let zero = self.usize_literal(0);
             let (state_init, instance_check) = if self.config.generate_reset_state {
                 (
                     "const state = { a: arg0, b: arg1, cnt: 1, instance: __wbg_instance_id };",
@@ -3352,7 +3444,7 @@ if (require('worker_threads').isMainThread) {{
                         // be deallocated while we're invoking it.
                         state.cnt++;
                         const a = state.a;
-                        state.a = 0;
+                        state.a = {zero};
                         try {{
                             return f(a, state.b, ...args);
                         }} finally {{
@@ -3363,7 +3455,7 @@ if (require('worker_threads').isMainThread) {{
                     real._wbg_cb_unref = () => {{
                         if (--state.cnt === 0) {{
                             {destroy_state};
-                            state.a = 0;
+                            state.a = {zero};
                             CLOSURE_DTORS.unregister(state);
                         }}
                     }};
@@ -3401,6 +3493,7 @@ if (require('worker_threads').isMainThread) {{
         // `this.a` pointer to prevent it being used again the
         // future.
         self.intrinsic("make_closure".into(), "makeClosure".into(), {
+            let zero = self.usize_literal(0);
             let (state_init, instance_check) = if self.config.generate_reset_state {
                 (
                     "const state = { a: arg0, b: arg1, cnt: 1, instance: __wbg_instance_id };",
@@ -3432,7 +3525,7 @@ if (require('worker_threads').isMainThread) {{
                     real._wbg_cb_unref = () => {{
                         if (--state.cnt === 0) {{
                             {destroy_state};
-                            state.a = 0;
+                            state.a = {zero};
                             CLOSURE_DTORS.unregister(state);
                         }}
                     }};
@@ -4867,7 +4960,12 @@ function __wbg_handle_catch(e) {{
                 assert!(!variadic);
                 assert_eq!(args.len(), 1);
                 let identifier = self.require_class_unwrap(class);
-                Ok(format!("{identifier}.__unwrap({})", args[0]))
+                let expr = format!("{identifier}.__unwrap({})", args[0]);
+                if self.memory64 {
+                    Ok(self.to_wasm_ptr(&raw_wasm_ptr_expr(&expr)))
+                } else {
+                    Ok(expr)
+                }
             }
         }
     }
@@ -5993,4 +6091,12 @@ impl fmt::Display for MemView {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}{}", self.name, self.num)
     }
+}
+
+#[test]
+fn raw_wasm_ptr_marker_roundtrips() {
+    let expr = raw_wasm_ptr_expr("this.__wbg_ptr_raw");
+    assert_eq!(expr, "/*__wbg_raw_ptr__*/(this.__wbg_ptr_raw)");
+    assert_eq!(strip_raw_wasm_ptr_expr(&expr), Some("this.__wbg_ptr_raw"));
+    assert_eq!(strip_raw_wasm_ptr_expr("this.__wbg_ptr_raw"), None);
 }

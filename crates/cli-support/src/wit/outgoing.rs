@@ -8,7 +8,7 @@ use wasm_bindgen_shared::identifier::to_valid_ident;
 
 fn closure_word_descriptor(memory64: bool) -> Descriptor {
     if memory64 {
-        Descriptor::I64AsF64
+        Descriptor::I64
     } else {
         Descriptor::I32
     }
@@ -309,8 +309,8 @@ impl InstructionBuilder<'_, '_> {
         let mut descriptor = descriptor.clone();
         // Synthesize the a/b arguments that aren't present in the
         // signature from wasm-bindgen but are present in the Wasm file.
-        // On wasm64 these are internal `WasmWord`s, which use the JS-number
-        // ABI instead of the public bigint ABI.
+        // On wasm64 these are internal `WasmWord`s, which keep the exact i64
+        // ABI instead of using the public `usize`/`isize` number ABI.
         let nargs = descriptor.arguments.len();
         let ptr_descriptor = closure_word_descriptor(self.cx.memory64());
         descriptor.arguments.insert(0, ptr_descriptor.clone());
@@ -722,16 +722,12 @@ impl InstructionBuilder<'_, '_> {
     }
 
     fn outgoing_internal_word_ty(&self) -> AdapterType {
-        if self.return_position && self.cx.memory64() {
-            AdapterType::F64
-        } else {
-            self.ptr_ty()
-        }
+        self.ptr_ty()
     }
 }
 
 #[test]
-fn closure_word_descriptor_uses_number_abi_on_memory64() {
-    assert_eq!(closure_word_descriptor(true), Descriptor::I64AsF64);
+fn closure_word_descriptor_uses_exact_word_abi_on_memory64() {
+    assert_eq!(closure_word_descriptor(true), Descriptor::I64);
     assert_eq!(closure_word_descriptor(false), Descriptor::I32);
 }

@@ -7,13 +7,7 @@ use anyhow::{bail, Context, Error};
 use super::Tests;
 use super::{node::shared_setup, Cli};
 
-pub fn execute(
-    module: &str,
-    tmpdir: &Path,
-    cli: Cli,
-    tests: Tests,
-    uses_memory64: bool,
-) -> Result<(), Error> {
+pub fn execute(module: &str, tmpdir: &Path, cli: Cli, tests: Tests) -> Result<(), Error> {
     let mut js_to_execute = format!(
         r#"import * as wasm from "./{module}.js";
 
@@ -28,7 +22,7 @@ pub fn execute(
     "#,
         shared_setup = shared_setup(cli.bench),
         nocapture = cli.nocapture || cli.bench,
-        args = cli.get_args(&tests, uses_memory64),
+        args = cli.get_args(&tests),
     );
 
     for test in tests.tests {

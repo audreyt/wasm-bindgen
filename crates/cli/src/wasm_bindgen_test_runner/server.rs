@@ -18,7 +18,6 @@ pub(crate) fn spawn(
     tests: Tests,
     test_mode: TestMode,
     isolate_origin: bool,
-    uses_memory64: bool,
     benchmark: PathBuf,
 ) -> Result<Server<impl Fn(&Request) -> Response + Send + Sync>, Error> {
     let mut js_to_execute = String::new();
@@ -413,7 +412,7 @@ SharedWorker.prototype = __wbg_OriginalSharedWorker.prototype;
 
     let nocapture = cli.nocapture || cli.bench;
     let is_bench = cli.bench;
-    let args = cli.get_args(&tests, uses_memory64);
+    let args = cli.get_args(&tests);
 
     if test_mode.is_worker() {
         let mut worker_script = if test_mode.no_modules() {

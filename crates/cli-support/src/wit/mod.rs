@@ -1264,7 +1264,7 @@ impl<'a> Context<'a> {
         self.aux.structs.push(aux);
 
         let ptr_desc = if self.memory64() {
-            Descriptor::I64AsF64
+            Descriptor::I64
         } else {
             Descriptor::I32
         };
@@ -2015,4 +2015,22 @@ fn test_struct_packer() {
     assert_eq!(read_ty(double), 2); // f64, already aligned
     assert_eq!(read_ty(i32___), 4); // u32, already aligned
     assert_eq!(read_ty(double), 6); // f64, NOT already aligned, skips up to offset 6
+}
+
+#[test]
+fn normalize_memory64_descriptor_only_rewrites_explicit_number_abi_options() {
+    let mut number_option = Descriptor::Option(Box::new(Descriptor::I64));
+    Context::normalize_memory64_descriptor(&mut number_option, walrus::ValType::F64);
+    assert_eq!(
+        number_option,
+        Descriptor::Option(Box::new(Descriptor::I64AsF64))
+    );
+
+    let mut exact_i64 = Descriptor::I64;
+    Context::normalize_memory64_descriptor(&mut exact_i64, walrus::ValType::I64);
+    assert_eq!(exact_i64, Descriptor::I64);
+
+    let mut exact_option = Descriptor::Option(Box::new(Descriptor::I64));
+    Context::normalize_memory64_descriptor(&mut exact_option, walrus::ValType::I64);
+    assert_eq!(exact_option, Descriptor::Option(Box::new(Descriptor::I64)));
 }

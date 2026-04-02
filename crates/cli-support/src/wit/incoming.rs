@@ -547,10 +547,6 @@ impl InstructionBuilder<'_, '_> {
     }
 
     fn incoming_internal_word_ty(&self) -> AdapterType {
-        if self.return_position && self.cx.memory64() {
-            AdapterType::F64
-        } else {
-            self.ptr_ty()
-        }
+        self.ptr_ty()
     }
 }
