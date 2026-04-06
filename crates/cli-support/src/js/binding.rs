@@ -216,11 +216,7 @@ impl<'a, 'b> Builder<'a, 'b> {
                 }
             } else {
                 let ptr = js.class_raw_ptr("this");
-                if js.cx.memory64 {
-                    js.args.push(raw_wasm_ptr_expr(&ptr));
-                } else {
-                    js.args.push(ptr);
-                }
+                js.args.push(js.coerce_class_ptr_arg(&ptr));
             }
         } else if self.classless_this {
             let _ = params.next();
@@ -698,18 +694,21 @@ impl<'a, 'b> JsBuilder<'a, 'b> {
 
     /// Access the exact internal pointer stored on an exported Rust class.
     pub fn class_raw_ptr(&mut self, expr: &str) -> String {
-        if self.cx.memory64 {
+        let expr = if self.cx.memory64 {
             self.cx.expose_raw_wasm_ptr_symbol();
             raw_wasm_ptr_slot(expr)
         } else {
             format!("{expr}.__wbg_ptr")
-        }
+        };
+        raw_wasm_ptr_expr(&expr)
     }
 
     /// Coerce an exported-class pointer back into a Wasm call argument.
     pub fn coerce_class_ptr_arg(&self, val: &str) -> String {
         if self.cx.memory64 {
             self.coerce_raw_ptr(val)
+        } else if let Some(val) = strip_raw_wasm_ptr_expr(val) {
+            val.to_string()
         } else {
             self.coerce_ptr(val)
         }
