@@ -3,6 +3,21 @@
 
 ## Unreleased
 
+### Fixed
+
+* Fixed two CLI issues affecting WASM modules built by rustc 1.94+. First,
+  a panic (`failed to find N in function table`) caused by lld emitting element
+  segment offsets as `global.get $__table_base` or extended const expressions
+  instead of plain `i32.const N` for large function tables; the fix adds a
+  const-expression evaluator in `get_function_table_entry` and guards against
+  integer underflow in multi-segment tables. Second, the descriptor interpreter
+  now distinguishes `__stack_pointer` from other globals (e.g.
+  `GOT.func.internal.*`) instead of blindly treating all global accesses as
+  stack pointer operations, falling back to the old behavior for modules without
+  the `__stack_pointer` export.
+  [#5076](https://github.com/wasm-bindgen/wasm-bindgen/issues/5076)
+  [#5080](https://github.com/wasm-bindgen/wasm-bindgen/issues/5080)
+
 ## [0.2.117](https://github.com/rustwasm/wasm-bindgen/compare/0.2.116...0.2.117)
 
 ### Fixed
@@ -17,6 +32,10 @@
   (non-`VideoFrame`) call sites, breaking `JsFuture::from(promise).await?`.
   [#5064](https://github.com/wasm-bindgen/wasm-bindgen/issues/5064)
   [#5073](https://github.com/wasm-bindgen/wasm-bindgen/pull/5073)
+
+* Fixed handling logic for environment variable `WASM_BINDGEN_TEST_ADDRESS` in
+  the test runner, when running tests in headless mode.
+  [#5087](https://github.com/wasm-bindgen/wasm-bindgen/pull/5087)
 
 ## [0.2.116](https://github.com/rustwasm/wasm-bindgen/compare/0.2.115...0.2.116)
 
