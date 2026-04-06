@@ -706,7 +706,11 @@ impl<'a, 'b> JsBuilder<'a, 'b> {
     /// Coerce an exported-class pointer back into a Wasm call argument.
     pub fn coerce_class_ptr_arg(&self, val: &str) -> String {
         if self.cx.memory64 {
-            self.coerce_raw_ptr(val)
+            if strip_raw_wasm_ptr_expr(val).is_some() {
+                val.to_string()
+            } else {
+                self.coerce_raw_ptr(val)
+            }
         } else if let Some(val) = strip_raw_wasm_ptr_expr(val) {
             val.to_string()
         } else {
