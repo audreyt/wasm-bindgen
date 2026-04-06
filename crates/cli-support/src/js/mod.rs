@@ -40,9 +40,20 @@ macro_rules! region {
 
 const RAW_WASM_PTR_PREFIX: &str = "/*__wbg_raw_ptr__*/(";
 const RAW_WASM_PTR_SUFFIX: &str = ")";
+const RAW_WASM_PTR_SYMBOL: &str = "__wbg_ptr_raw";
 
 pub(crate) fn raw_wasm_ptr_expr(expr: &str) -> String {
     format!("{RAW_WASM_PTR_PREFIX}{expr}{RAW_WASM_PTR_SUFFIX}")
+}
+
+pub(crate) fn raw_wasm_ptr_slot(expr: &str) -> String {
+    format!("{expr}[{RAW_WASM_PTR_SYMBOL}]")
+}
+
+pub(crate) fn define_raw_wasm_ptr_slot(expr: &str, raw: &str) -> String {
+    format!(
+        "Object.defineProperty({expr}, {RAW_WASM_PTR_SYMBOL}, {{ value: {raw}, writable: true }});"
+    )
 }
 
 pub(crate) fn strip_raw_wasm_ptr_expr(expr: &str) -> Option<&str> {
@@ -348,6 +359,17 @@ impl<'a> Context<'a> {
         } else {
             format!("{expr} >>> 0")
         }
+    }
+
+    fn expose_raw_wasm_ptr_symbol(&mut self) {
+        if !self.memory64 || self.has_intrinsic("raw_wasm_ptr_symbol") {
+            return;
+        }
+        self.intrinsic(
+            "raw_wasm_ptr_symbol".into(),
+            None,
+            format!("\nconst {RAW_WASM_PTR_SYMBOL} = Symbol('wasm-bindgen raw pointer');\n").into(),
+        );
     }
 
     /// Coerce a wasm pointer-sized value to an unsigned JS pointer.
@@ -1654,26 +1676,31 @@ if (require('worker_threads').isMainThread) {{
 
         if class.wrap_needed {
             let (ptr_prelude, ptr_assignment, register_data) = if self.memory64 {
+                self.expose_raw_wasm_ptr_symbol();
+                let raw_ptr_slot = raw_wasm_ptr_slot("obj");
+                let raw_ptr_assignment = define_raw_wasm_ptr_slot("obj", "rawPtr");
                 if self.config.generate_reset_state {
                     (
                         "const rawPtr = ptr; ptr = Number(ptr);".to_string(),
-                        "\
+                        format!(
+                            "\
                         obj.__wbg_ptr = ptr;
-                        Object.defineProperty(obj, '__wbg_ptr_raw', { value: rawPtr, writable: true });
+                        {raw_ptr_assignment}
                         obj.__wbg_inst = __wbg_instance_id;
                         "
-                        .to_string(),
+                        ),
                         "{ ptr: rawPtr, instance: __wbg_instance_id }".to_string(),
                     )
                 } else {
                     (
                         "const rawPtr = ptr; ptr = Number(ptr);".to_string(),
-                        "\
+                        format!(
+                            "\
                         obj.__wbg_ptr = ptr;
-                        Object.defineProperty(obj, '__wbg_ptr_raw', { value: rawPtr, writable: true });
+                        {raw_ptr_assignment}
                         "
-                        .to_string(),
-                        "obj.__wbg_ptr_raw".to_string(),
+                        ),
+                        raw_ptr_slot,
                     )
                 }
             } else if self.config.generate_reset_state {
@@ -1807,10 +1834,12 @@ if (require('worker_threads').isMainThread) {{
         let mut free = format!("wasm.{free_fn}({free_method_ptr}, 0)");
         free = binding::maybe_wrap_try_catch(&free, self.aux.wrapped_js_tag.is_some());
         let destroy_into_raw = if self.memory64 {
+            self.expose_raw_wasm_ptr_symbol();
+            let raw_ptr_slot = raw_wasm_ptr_slot("this");
             format!(
-                "const ptr = this.__wbg_ptr_raw;
+                "const ptr = {raw_ptr_slot};
                 this.__wbg_ptr = 0;
-                this.__wbg_ptr_raw = {};
+                {raw_ptr_slot} = {};
                 {identifier}Finalization.unregister(this);
                 return ptr;",
                 self.usize_literal(0)
@@ -6095,8 +6124,15 @@ impl fmt::Display for MemView {
 
 #[test]
 fn raw_wasm_ptr_marker_roundtrips() {
-    let expr = raw_wasm_ptr_expr("this.__wbg_ptr_raw");
-    assert_eq!(expr, "/*__wbg_raw_ptr__*/(this.__wbg_ptr_raw)");
-    assert_eq!(strip_raw_wasm_ptr_expr(&expr), Some("this.__wbg_ptr_raw"));
-    assert_eq!(strip_raw_wasm_ptr_expr("this.__wbg_ptr_raw"), None);
+    let slot = raw_wasm_ptr_slot("this");
+    assert_eq!(slot, "this[__wbg_ptr_raw]");
+    assert_eq!(
+        define_raw_wasm_ptr_slot("this", "rawPtr"),
+        "Object.defineProperty(this, __wbg_ptr_raw, { value: rawPtr, writable: true });"
+    );
+
+    let expr = raw_wasm_ptr_expr(&slot);
+    assert_eq!(expr, "/*__wbg_raw_ptr__*/(this[__wbg_ptr_raw])");
+    assert_eq!(strip_raw_wasm_ptr_expr(&expr), Some("this[__wbg_ptr_raw]"));
+    assert_eq!(strip_raw_wasm_ptr_expr(&slot), None);
 }
