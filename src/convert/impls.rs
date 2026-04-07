@@ -846,7 +846,14 @@ impl<T> FromWasmAbi for NonNull<T> {
     #[inline]
     unsafe fn from_abi(js: Self::Abi) -> Self {
         // SAFETY: Checked in bindings.
-        NonNull::new_unchecked(js as usize as *mut T)
+        #[cfg(target_arch = "wasm64")]
+        {
+            NonNull::new_unchecked(js as usize as *mut T)
+        }
+        #[cfg(not(target_arch = "wasm64"))]
+        {
+            NonNull::new_unchecked(js as *mut T)
+        }
     }
 }
 

@@ -343,11 +343,7 @@ impl<'a> Context<'a> {
 
     /// Normalizes a Wasm pointer parameter for JS use.
     fn wasm_ptr_fixup_stmt(&self, ptr: &str) -> String {
-        if self.memory64 {
-            format!("{ptr} = {};", self.to_js_ptr_inline(ptr))
-        } else {
-            format!("{ptr} = {};", self.to_js_ptr_inline(ptr))
-        }
+        format!("{ptr} = {};", self.to_js_ptr_inline(ptr))
     }
 
     /// Normalizes a Wasm slice pointer/length pair for JS use.
@@ -1630,12 +1626,11 @@ if (require('worker_threads').isMainThread) {{
                 if self.config.generate_reset_state {
                     (
                         self.wasm_ptr_fixup_stmt("ptr"),
-                        format!(
-                            "\
+                        "\
                         obj.__wbg_ptr = ptr;
                         obj.__wbg_inst = __wbg_instance_id;
                         "
-                        ),
+                        .to_string(),
                         "{ ptr, instance: __wbg_instance_id }".to_string(),
                     )
                 } else {
