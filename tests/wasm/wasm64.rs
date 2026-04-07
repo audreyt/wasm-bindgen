@@ -1,8 +1,8 @@
 //! Tests specific to the wasm64/memory64 architecture.
 //!
 //! These tests exercise code paths that differ between wasm32 and wasm64,
-//! such as 64-bit pointer handling, BigInt conversions in JS glue code,
-//! and correct round-tripping of values through the wasm64 ABI.
+//! such as 64-bit pointer handling, JS-number pointer conversions, and
+//! correct round-tripping of values through the wasm64 ABI.
 
 #![cfg(test)]
 

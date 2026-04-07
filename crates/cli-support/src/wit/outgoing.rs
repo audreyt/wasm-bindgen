@@ -8,7 +8,7 @@ use wasm_bindgen_shared::identifier::to_valid_ident;
 
 fn closure_word_descriptor(memory64: bool) -> Descriptor {
     if memory64 {
-        Descriptor::I64
+        Descriptor::I64AsF64
     } else {
         Descriptor::I32
     }
@@ -119,7 +119,11 @@ impl InstructionBuilder<'_, '_> {
             }
 
             Descriptor::RustStruct(class) => {
-                let ptr_ty = self.ptr_ty();
+                let ptr_ty = if self.cx.memory64() {
+                    AdapterType::F64
+                } else {
+                    self.ptr_ty()
+                };
                 self.instruction(
                     &[ptr_ty],
                     Instruction::RustFromI32 {
@@ -199,13 +203,12 @@ impl InstructionBuilder<'_, '_> {
             Descriptor::ClampedU8 => unreachable!(),
 
             Descriptor::NonNull => {
-                let ptr_ty = self.ptr_ty();
-                let instr = if ptr_ty == AdapterType::I64 {
-                    Instruction::WasmToInt64 { unsigned: true }
+                if self.cx.memory64() {
+                    self.get(AdapterType::F64);
+                    self.output.push(AdapterType::NonNull);
                 } else {
-                    Instruction::WasmToInt32 { unsigned_32: true }
-                };
-                self.instruction(&[ptr_ty], instr, &[AdapterType::NonNull]);
+                    self.outgoing_i32(AdapterType::NonNull);
+                }
             }
 
             Descriptor::Closure(d) => {
@@ -309,8 +312,8 @@ impl InstructionBuilder<'_, '_> {
         let mut descriptor = descriptor.clone();
         // Synthesize the a/b arguments that aren't present in the
         // signature from wasm-bindgen but are present in the Wasm file.
-        // On wasm64 these are internal `WasmWord`s, which keep the exact i64
-        // ABI instead of using the public `usize`/`isize` number ABI.
+        // On wasm64 these use the same number ABI as the rest of the
+        // pointer-sized wasm-bindgen surface.
         let nargs = descriptor.arguments.len();
         let ptr_descriptor = closure_word_descriptor(self.cx.memory64());
         descriptor.arguments.insert(0, ptr_descriptor.clone());
@@ -413,7 +416,11 @@ impl InstructionBuilder<'_, '_> {
                 );
             }
             Descriptor::RustStruct(name) => {
-                let ptr_ty = self.ptr_ty();
+                let ptr_ty = if self.cx.memory64() {
+                    AdapterType::F64
+                } else {
+                    self.ptr_ty()
+                };
                 self.instruction(
                     &[ptr_ty],
                     Instruction::OptionRustFromI32 {
@@ -448,7 +455,11 @@ impl InstructionBuilder<'_, '_> {
             }
 
             Descriptor::NonNull => {
-                let ptr_ty = self.ptr_ty();
+                let ptr_ty = if self.cx.memory64() {
+                    AdapterType::F64
+                } else {
+                    self.ptr_ty()
+                };
                 self.instruction(
                     &[ptr_ty],
                     Instruction::OptionNonNullFromI32,
@@ -456,11 +467,7 @@ impl InstructionBuilder<'_, '_> {
                 );
             }
             Descriptor::RawPointer => {
-                if self.cx.memory64() {
-                    self.option_native(false, ValType::I64);
-                } else {
-                    self.out_option_sentinel64(AdapterType::U32);
-                }
+                self.out_option_sentinel64(AdapterType::U32);
             }
 
             _ => bail!(
@@ -722,12 +729,16 @@ impl InstructionBuilder<'_, '_> {
     }
 
     fn outgoing_internal_word_ty(&self) -> AdapterType {
-        self.ptr_ty()
+        if self.return_position && self.cx.memory64() {
+            AdapterType::F64
+        } else {
+            self.ptr_ty()
+        }
     }
 }
 
 #[test]
-fn closure_word_descriptor_uses_exact_word_abi_on_memory64() {
-    assert_eq!(closure_word_descriptor(true), Descriptor::I64);
+fn closure_word_descriptor_uses_number_abi_on_memory64() {
+    assert_eq!(closure_word_descriptor(true), Descriptor::I64AsF64);
     assert_eq!(closure_word_descriptor(false), Descriptor::I32);
 }

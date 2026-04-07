@@ -1,5 +1,6 @@
 use crate::JsValue;
 use crate::__rt;
+use crate::__rt::{WasmPtr, WasmWord};
 
 use alloc::slice;
 use alloc::vec::Vec;
@@ -142,7 +143,9 @@ pub extern "C" fn __externref_table_dealloc(idx: u32) {
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn __externref_drop_slice(ptr: *mut JsValue, len: usize) {
+pub unsafe extern "C" fn __externref_drop_slice(ptr: WasmPtr<JsValue>, len: WasmWord) {
+    let ptr = ptr.into_ptr();
+    let len = len.into_usize();
     for slot in slice::from_raw_parts_mut(ptr, len) {
         __externref_table_dealloc(slot.idx);
     }

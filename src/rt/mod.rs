@@ -282,9 +282,12 @@ pub fn assert_not_null<T>(s: *mut T) {
     }
 }
 
+#[cfg(target_arch = "wasm64")]
+type WasmWordRepr = f64;
+#[cfg(not(target_arch = "wasm64"))]
 type WasmWordRepr = usize;
 
-/// A single pointer-sized machine word.
+/// A single pointer-sized machine word using the JS-number ABI on wasm64.
 #[repr(transparent)]
 #[derive(Copy, Clone, Default)]
 pub struct WasmWord(WasmWordRepr);
@@ -292,27 +295,62 @@ pub struct WasmWord(WasmWordRepr);
 impl WasmWord {
     #[inline]
     pub fn from_usize(value: usize) -> Self {
-        Self(value)
+        #[cfg(target_arch = "wasm64")]
+        {
+            Self(value as f64)
+        }
+        #[cfg(not(target_arch = "wasm64"))]
+        {
+            Self(value)
+        }
     }
 
     #[inline]
     pub fn into_usize(self) -> usize {
-        self.0
+        #[cfg(target_arch = "wasm64")]
+        {
+            self.0 as usize
+        }
+        #[cfg(not(target_arch = "wasm64"))]
+        {
+            self.0
+        }
     }
 
     #[inline]
     pub fn from_isize(value: isize) -> Self {
-        Self(value as usize)
+        #[cfg(target_arch = "wasm64")]
+        {
+            Self(value as f64)
+        }
+        #[cfg(not(target_arch = "wasm64"))]
+        {
+            Self(value as usize)
+        }
     }
 
     #[inline]
     pub fn into_isize(self) -> isize {
-        self.0 as isize
+        #[cfg(target_arch = "wasm64")]
+        {
+            self.0 as isize
+        }
+        #[cfg(not(target_arch = "wasm64"))]
+        {
+            self.0 as isize
+        }
     }
 
     #[inline]
     pub fn is_zero(&self) -> bool {
-        self.0 == 0
+        #[cfg(target_arch = "wasm64")]
+        {
+            self.0 == 0.0
+        }
+        #[cfg(not(target_arch = "wasm64"))]
+        {
+            self.0 == 0
+        }
     }
 }
 
@@ -333,7 +371,7 @@ impl WasmAbi for WasmWord {
     }
 }
 
-/// A typed raw pointer using the platform pointer-sized representation.
+/// A typed raw pointer using the JS-number ABI on wasm64.
 #[repr(transparent)]
 #[derive(Copy, Clone)]
 pub struct WasmPtr<T> {

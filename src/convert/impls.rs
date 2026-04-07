@@ -319,20 +319,40 @@ type_wasm_native_f64_option!(
 );
 
 impl IntoWasmAbi for usize {
+    #[cfg(target_arch = "wasm64")]
+    type Abi = f64;
+    #[cfg(not(target_arch = "wasm64"))]
     type Abi = usize;
 
     #[inline]
-    fn into_abi(self) -> usize {
-        self
+    fn into_abi(self) -> Self::Abi {
+        #[cfg(target_arch = "wasm64")]
+        {
+            self as f64
+        }
+        #[cfg(not(target_arch = "wasm64"))]
+        {
+            self
+        }
     }
 }
 
 impl FromWasmAbi for usize {
+    #[cfg(target_arch = "wasm64")]
+    type Abi = f64;
+    #[cfg(not(target_arch = "wasm64"))]
     type Abi = usize;
 
     #[inline]
-    unsafe fn from_abi(js: usize) -> Self {
-        js
+    unsafe fn from_abi(js: Self::Abi) -> Self {
+        #[cfg(target_arch = "wasm64")]
+        {
+            js as usize
+        }
+        #[cfg(not(target_arch = "wasm64"))]
+        {
+            js
+        }
     }
 }
 
@@ -371,20 +391,40 @@ impl UpcastFrom<usize> for JsOption<JsValue> {}
 impl UpcastFrom<usize> for usize {}
 
 impl IntoWasmAbi for isize {
+    #[cfg(target_arch = "wasm64")]
+    type Abi = f64;
+    #[cfg(not(target_arch = "wasm64"))]
     type Abi = usize;
 
     #[inline]
-    fn into_abi(self) -> usize {
-        self as usize
+    fn into_abi(self) -> Self::Abi {
+        #[cfg(target_arch = "wasm64")]
+        {
+            self as f64
+        }
+        #[cfg(not(target_arch = "wasm64"))]
+        {
+            self as usize
+        }
     }
 }
 
 impl FromWasmAbi for isize {
+    #[cfg(target_arch = "wasm64")]
+    type Abi = f64;
+    #[cfg(not(target_arch = "wasm64"))]
     type Abi = usize;
 
     #[inline]
-    unsafe fn from_abi(js: usize) -> Self {
-        js as isize
+    unsafe fn from_abi(js: Self::Abi) -> Self {
+        #[cfg(target_arch = "wasm64")]
+        {
+            js as isize
+        }
+        #[cfg(not(target_arch = "wasm64"))]
+        {
+            js as isize
+        }
     }
 }
 
@@ -674,22 +714,12 @@ impl<T, Target> UpcastFrom<*const T> for *const Target where Target: UpcastFrom<
 impl<T, Target> UpcastFrom<*const T> for JsOption<*const Target> where Target: UpcastFrom<T> {}
 
 impl<T> IntoWasmAbi for Option<*const T> {
-    #[cfg(target_arch = "wasm64")]
-    type Abi = Option<usize>;
-    #[cfg(not(target_arch = "wasm64"))]
     type Abi = f64;
 
     #[inline]
     fn into_abi(self) -> Self::Abi {
-        #[cfg(target_arch = "wasm64")]
-        {
-            self.map(|ptr| ptr as usize)
-        }
-        #[cfg(not(target_arch = "wasm64"))]
-        {
-            self.map(|ptr| ptr as usize as f64)
-                .unwrap_or(F64_ABI_OPTION_SENTINEL)
-        }
+        self.map(|ptr| ptr as usize as f64)
+            .unwrap_or(F64_ABI_OPTION_SENTINEL)
     }
 }
 
@@ -701,24 +731,14 @@ impl<T, Target> UpcastFrom<Option<T>> for Option<Target> where Target: UpcastFro
 impl<T, Target> UpcastFrom<Option<T>> for JsOption<Option<Target>> where Target: UpcastFrom<T> {}
 
 impl<T> FromWasmAbi for Option<*const T> {
-    #[cfg(target_arch = "wasm64")]
-    type Abi = Option<usize>;
-    #[cfg(not(target_arch = "wasm64"))]
     type Abi = f64;
 
     #[inline]
     unsafe fn from_abi(js: Self::Abi) -> Option<*const T> {
-        #[cfg(target_arch = "wasm64")]
-        {
-            js.map(|ptr| ptr as *const T)
-        }
-        #[cfg(not(target_arch = "wasm64"))]
-        {
-            if js == F64_ABI_OPTION_SENTINEL {
-                None
-            } else {
-                Some(js as usize as *const T)
-            }
+        if js == F64_ABI_OPTION_SENTINEL {
+            None
+        } else {
+            Some(js as usize as *const T)
         }
     }
 }
@@ -762,78 +782,85 @@ impl<T> FromWasmAbi for *mut T {
 }
 
 impl<T> IntoWasmAbi for Option<*mut T> {
-    #[cfg(target_arch = "wasm64")]
-    type Abi = Option<usize>;
-    #[cfg(not(target_arch = "wasm64"))]
     type Abi = f64;
 
     #[inline]
     fn into_abi(self) -> Self::Abi {
-        #[cfg(target_arch = "wasm64")]
-        {
-            self.map(|ptr| ptr as usize)
-        }
-        #[cfg(not(target_arch = "wasm64"))]
-        {
-            self.map(|ptr| ptr as usize as f64)
-                .unwrap_or(F64_ABI_OPTION_SENTINEL)
-        }
+        self.map(|ptr| ptr as usize as f64)
+            .unwrap_or(F64_ABI_OPTION_SENTINEL)
     }
 }
 
 impl<T> FromWasmAbi for Option<*mut T> {
-    #[cfg(target_arch = "wasm64")]
-    type Abi = Option<usize>;
-    #[cfg(not(target_arch = "wasm64"))]
     type Abi = f64;
 
     #[inline]
     unsafe fn from_abi(js: Self::Abi) -> Option<*mut T> {
-        #[cfg(target_arch = "wasm64")]
-        {
-            js.map(|ptr| ptr as *mut T)
-        }
-        #[cfg(not(target_arch = "wasm64"))]
-        {
-            if js == F64_ABI_OPTION_SENTINEL {
-                None
-            } else {
-                Some(js as usize as *mut T)
-            }
+        if js == F64_ABI_OPTION_SENTINEL {
+            None
+        } else {
+            Some(js as usize as *mut T)
         }
     }
 }
 
 impl<T> IntoWasmAbi for NonNull<T> {
+    #[cfg(target_arch = "wasm64")]
+    type Abi = f64;
+    #[cfg(not(target_arch = "wasm64"))]
     type Abi = usize;
 
     #[inline]
-    fn into_abi(self) -> usize {
-        self.as_ptr() as usize
+    fn into_abi(self) -> Self::Abi {
+        #[cfg(target_arch = "wasm64")]
+        {
+            self.as_ptr() as usize as f64
+        }
+        #[cfg(not(target_arch = "wasm64"))]
+        {
+            self.as_ptr() as usize
+        }
     }
 }
 
 impl<T> OptionIntoWasmAbi for NonNull<T> {
     #[inline]
-    fn none() -> usize {
-        0
+    fn none() -> Self::Abi {
+        #[cfg(target_arch = "wasm64")]
+        {
+            0.0
+        }
+        #[cfg(not(target_arch = "wasm64"))]
+        {
+            0
+        }
     }
 }
 
 impl<T> FromWasmAbi for NonNull<T> {
+    #[cfg(target_arch = "wasm64")]
+    type Abi = f64;
+    #[cfg(not(target_arch = "wasm64"))]
     type Abi = usize;
 
     #[inline]
     unsafe fn from_abi(js: Self::Abi) -> Self {
         // SAFETY: Checked in bindings.
-        NonNull::new_unchecked(js as *mut T)
+        NonNull::new_unchecked(js as usize as *mut T)
     }
 }
 
 impl<T> OptionFromWasmAbi for NonNull<T> {
     #[inline]
-    fn is_none(js: &usize) -> bool {
-        *js == 0
+    fn is_none(js: &Self::Abi) -> bool {
+        #[cfg(target_arch = "wasm64")]
+        {
+            *js == 0.0
+        }
+        #[cfg(not(target_arch = "wasm64"))]
+        {
+            *js == 0
+        }
     }
 }
 

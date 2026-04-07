@@ -71,7 +71,11 @@ impl InstructionBuilder<'_, '_> {
                 )
             }
             Descriptor::RustStruct(class) => {
-                let ptr_ty = self.incoming_internal_word_ty();
+                let ptr_ty = if self.cx.memory64() {
+                    AdapterType::F64
+                } else {
+                    self.ptr_ty()
+                };
                 self.instruction(
                     &[AdapterType::Struct(class.clone())],
                     Instruction::I32FromExternrefRustOwned {
@@ -187,7 +191,11 @@ impl InstructionBuilder<'_, '_> {
             Descriptor::ClampedU8 => unreachable!(),
 
             Descriptor::NonNull => {
-                let ptr_ty = self.ptr_ty();
+                let ptr_ty = if self.cx.memory64() {
+                    AdapterType::F64
+                } else {
+                    self.ptr_ty()
+                };
                 self.instruction(
                     &[AdapterType::NonNull],
                     Instruction::I32FromNonNull,
@@ -201,7 +209,11 @@ impl InstructionBuilder<'_, '_> {
     fn incoming_ref(&mut self, mutable: bool, arg: &Descriptor) -> Result<(), Error> {
         match arg {
             Descriptor::RustStruct(class) => {
-                let ptr_ty = self.ptr_ty();
+                let ptr_ty = if self.cx.memory64() {
+                    AdapterType::F64
+                } else {
+                    self.ptr_ty()
+                };
                 self.instruction(
                     &[AdapterType::Struct(class.clone())],
                     Instruction::I32FromExternrefRustBorrow {
@@ -361,7 +373,11 @@ impl InstructionBuilder<'_, '_> {
                 );
             }
             Descriptor::RustStruct(name) => {
-                let ptr_ty = self.incoming_internal_word_ty();
+                let ptr_ty = if self.cx.memory64() {
+                    AdapterType::F64
+                } else {
+                    self.ptr_ty()
+                };
                 self.instruction(
                     &[AdapterType::Struct(name.clone()).option()],
                     Instruction::I32FromOptionRust {
@@ -404,7 +420,11 @@ impl InstructionBuilder<'_, '_> {
             }
 
             Descriptor::NonNull => {
-                let ptr_ty = self.ptr_ty();
+                let ptr_ty = if self.cx.memory64() {
+                    AdapterType::F64
+                } else {
+                    self.ptr_ty()
+                };
                 self.instruction(
                     &[AdapterType::NonNull.option()],
                     Instruction::I32FromOptionNonNull,
@@ -412,15 +432,7 @@ impl InstructionBuilder<'_, '_> {
                 )
             }
             Descriptor::RawPointer => {
-                if self.cx.memory64() {
-                    self.instruction(
-                        &[AdapterType::U64.option()],
-                        Instruction::FromOptionNative { ty: ValType::I64 },
-                        &[AdapterType::I32, AdapterType::I64],
-                    );
-                } else {
-                    self.in_option_sentinel64_number();
-                }
+                self.in_option_sentinel64_number();
             }
 
             _ => bail!(
@@ -547,6 +559,10 @@ impl InstructionBuilder<'_, '_> {
     }
 
     fn incoming_internal_word_ty(&self) -> AdapterType {
-        self.ptr_ty()
+        if self.return_position && self.cx.memory64() {
+            AdapterType::F64
+        } else {
+            self.ptr_ty()
+        }
     }
 }

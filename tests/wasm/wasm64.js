@@ -1,15 +1,13 @@
 const wasm = require("wasm-bindgen-test");
 
-// Verify that pointer-sized values returned from Wasm are BigInt (64-bit) rather than Number.
+// Verify that pointer-sized values returned from Wasm use the JS-number pointer ABI.
 exports.js_verify_pointer_size = function () {
   const val = wasm.wasm64_return_usize();
-  // On wasm64, usize maps to i64 which becomes BigInt in JS
-  if (typeof val !== "bigint") {
-    throw new Error(`Expected bigint, got ${typeof val}: ${val}`);
+  if (typeof val !== "number") {
+    throw new Error(`Expected number, got ${typeof val}: ${val}`);
   }
-  // Check the value is correct (0x1_0000_0001 = 4294967297)
-  if (val !== 4294967297n) {
-    throw new Error(`Expected 4294967297n, got ${val}`);
+  if (val !== 4294967297) {
+    throw new Error(`Expected 4294967297, got ${val}`);
   }
   return true;
 };
@@ -24,7 +22,7 @@ exports.js_roundtrip_large_slice = function (slice) {
   return slice;
 };
 
-// Test creating and freeing a class instance to exercise the BigInt(ptr) free path.
+// Test creating and freeing a class instance to exercise the wasm64 pointer path.
 exports.js_create_and_free_class = function () {
   const obj = new wasm.Wasm64TestClass(42n);
   if (obj.get_value() !== 42n) {
@@ -33,7 +31,7 @@ exports.js_create_and_free_class = function () {
   if (obj.add(8n) !== 50n) {
     throw new Error(`Expected 50, got ${obj.add(8n)}`);
   }
-  // Free the object - this exercises the BigInt(ptr) free function path
+  // Free the object - this exercises the numeric wasm64 pointer path.
   obj.free();
   return true;
 };
@@ -41,11 +39,11 @@ exports.js_create_and_free_class = function () {
 // Test that closures work correctly with 64-bit return values.
 exports.js_call_closure_returning_usize = function () {
   const val = wasm.wasm64_closure_returning_usize();
-  if (typeof val !== "bigint") {
-    throw new Error(`Expected bigint, got ${typeof val}: ${val}`);
+  if (typeof val !== "number") {
+    throw new Error(`Expected number, got ${typeof val}: ${val}`);
   }
-  if (val !== 4294967297n) {
-    throw new Error(`Expected 4294967297n, got ${val}`);
+  if (val !== 4294967297) {
+    throw new Error(`Expected 4294967297, got ${val}`);
   }
   return true;
 };

@@ -1263,7 +1263,7 @@ impl<'a> Context<'a> {
         self.aux.structs.push(aux);
 
         let ptr_desc = if self.memory64() {
-            Descriptor::I64
+            Descriptor::I64AsF64
         } else {
             Descriptor::I32
         };
