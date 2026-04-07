@@ -417,14 +417,7 @@ impl FromWasmAbi for isize {
 
     #[inline]
     unsafe fn from_abi(js: Self::Abi) -> Self {
-        #[cfg(target_arch = "wasm64")]
-        {
-            js as isize
-        }
-        #[cfg(not(target_arch = "wasm64"))]
-        {
-            js as isize
-        }
+        js as isize
     }
 }
 

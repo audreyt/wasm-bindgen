@@ -331,14 +331,7 @@ impl WasmWord {
 
     #[inline]
     pub fn into_isize(self) -> isize {
-        #[cfg(target_arch = "wasm64")]
-        {
-            self.0 as isize
-        }
-        #[cfg(not(target_arch = "wasm64"))]
-        {
-            self.0 as isize
-        }
+        self.0 as isize
     }
 
     #[inline]
