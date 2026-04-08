@@ -323,46 +323,40 @@ impl<'a> Context<'a> {
         }
     }
 
-    /// Inline form of `to_js_ptr` for standalone assignments and initializers.
+    /// Coerce a pointer-shaped JS expression to the legacy wasm32 unsigned form.
     fn to_js_ptr_inline(&self, expr: &str) -> String {
         if self.memory64 {
-            format!("Number({expr})")
+            expr.to_string()
         } else {
             format!("{expr} >>> 0")
         }
     }
 
-    /// Coerce a wasm pointer-sized value to an unsigned JS pointer.
-    fn to_js_ptr(&self, expr: &str) -> String {
+    /// Normalizes a Wasm pointer parameter for JS use.
+    fn wasm_ptr_fixup_stmt(&self, ptr: &str) -> String {
         if self.memory64 {
-            format!("Number({expr})")
+            String::new()
         } else {
-            format!("({expr} >>> 0)")
+            format!("{ptr} = {ptr} >>> 0;")
         }
     }
 
-    /// Normalizes a Wasm pointer parameter for JS use.
-    fn wasm_ptr_fixup_stmt(&self, ptr: &str) -> String {
-        format!("{ptr} = {};", self.to_js_ptr_inline(ptr))
-    }
-
     /// Normalizes a Wasm slice pointer/length pair for JS use.
-    fn wasm_slice_fixup_stmt(&self, ptr: &str, len: &str) -> String {
+    fn wasm_slice_fixup_stmt(&self, ptr: &str, _len: &str) -> String {
         if self.memory64 {
-            format!("{ptr} = Number({ptr}); {len} = Number({len});")
+            String::new()
         } else {
             self.wasm_ptr_fixup_stmt(ptr)
         }
     }
 
-    /// Formats a pointer-sized literal for the current target ABI.
-    fn usize_literal(&self, value: usize) -> String {
-        value.to_string()
-    }
-
     /// Coerces the stack pointer shim result into a JS pointer.
     fn stack_ptr_result_expr(&self, offset: &str) -> String {
-        self.to_js_ptr(&format!("wasm.__wbindgen_add_to_stack_pointer({offset})"))
+        if self.memory64 {
+            format!("Number(wasm.__wbindgen_add_to_stack_pointer({offset}))")
+        } else {
+            format!("(wasm.__wbindgen_add_to_stack_pointer({offset}) >>> 0)")
+        }
     }
 
     /// Writes an ExportDefinition to global and typescript buffers.
@@ -1622,27 +1616,9 @@ if (require('worker_threads').isMainThread) {{
         }
 
         if class.wrap_needed {
-            let (ptr_prelude, ptr_assignment, register_data) = if self.memory64 {
-                if self.config.generate_reset_state {
-                    (
-                        self.wasm_ptr_fixup_stmt("ptr"),
-                        "\
-                        obj.__wbg_ptr = ptr;
-                        obj.__wbg_inst = __wbg_instance_id;
-                        "
-                        .to_string(),
-                        "{ ptr, instance: __wbg_instance_id }".to_string(),
-                    )
-                } else {
-                    (
-                        self.wasm_ptr_fixup_stmt("ptr"),
-                        "obj.__wbg_ptr = ptr;".to_string(),
-                        "obj.__wbg_ptr".to_string(),
-                    )
-                }
-            } else if self.config.generate_reset_state {
+            let ptr_prelude = self.wasm_ptr_fixup_stmt("ptr");
+            let (ptr_assignment, register_data) = if self.config.generate_reset_state {
                 (
-                    self.wasm_ptr_fixup_stmt("ptr"),
                     "\
                     obj.__wbg_ptr = ptr;
                     obj.__wbg_inst = __wbg_instance_id;
@@ -1652,7 +1628,6 @@ if (require('worker_threads').isMainThread) {{
                 )
             } else {
                 (
-                    self.wasm_ptr_fixup_stmt("ptr"),
                     "obj.__wbg_ptr = ptr;".to_string(),
                     "obj.__wbg_ptr".to_string(),
                 )
@@ -1685,11 +1660,7 @@ if (require('worker_threads').isMainThread) {{
         }
 
         let free_fn = wasm_bindgen_shared::free_function(qualified);
-        let finalization_free_ptr = if self.memory64 {
-            self.to_wasm_ptr("ptr")
-        } else {
-            "ptr >>> 0".to_string()
-        };
+        let finalization_free_ptr = if self.memory64 { "ptr" } else { "ptr >>> 0" };
         let finalization_callback = if self.config.generate_reset_state {
             format!(
                 "({{ ptr, instance }}) => {{
@@ -1762,11 +1733,7 @@ if (require('worker_threads').isMainThread) {{
             }
         }
 
-        let free_method_ptr = if self.memory64 {
-            self.to_wasm_ptr("ptr")
-        } else {
-            "ptr".to_string()
-        };
+        let free_method_ptr = "ptr";
         let mut free = format!("wasm.{free_fn}({free_method_ptr}, 0)");
         free = binding::maybe_wrap_try_catch(&free, self.aux.wrapped_js_tag.is_some());
         let destroy_into_raw = format!(

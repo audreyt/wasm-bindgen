@@ -668,19 +668,18 @@ impl<'a, 'b> JsBuilder<'a, 'b> {
         &self.args[idx as usize]
     }
 
-    /// Coerce a wasm pointer-sized value into the JS-number pointer shape.
+    /// Coerce a wasm pointer-sized value to the JS-number pointer shape.
     pub fn coerce_ptr(&self, val: &str) -> String {
-        self.cx.to_js_ptr(val)
+        if self.cx.memory64 {
+            val.to_string()
+        } else {
+            format!("({val} >>> 0)")
+        }
     }
 
     /// Coerce a JS pointer-sized value into the pointer ABI used by wasm-bindgen.
     pub fn coerce_raw_ptr(&self, val: &str) -> String {
         self.cx.to_wasm_ptr(val)
-    }
-
-    /// Format a pointer-sized literal for the target ABI.
-    pub fn size_literal(&self, size: usize) -> String {
-        self.cx.usize_literal(size)
     }
 
     pub fn prelude(&mut self, prelude: &str) {
@@ -1092,7 +1091,7 @@ fn instruction(
 
         Instruction::Retptr { size } => {
             js.cx.inject_stack_pointer_shim()?;
-            let size = js.size_literal(usize::try_from(*size).unwrap());
+            let size = usize::try_from(*size).unwrap();
             let retptr = js.cx.stack_ptr_result_expr(&format!("-{size}"));
             js.prelude(&format!("const retptr = {retptr};"));
             js.finally(&format!("wasm.__wbindgen_add_to_stack_pointer({size});"));
@@ -1112,7 +1111,11 @@ fn instruction(
             // which is currently the case for LLVM.
             let val = js.pop();
             let mem_string = mem.access(js.cx.config.mode.emscripten());
-            let arg0 = js.coerce_ptr(js.arg(0));
+            let arg0 = if js.cx.memory64 {
+                js.arg(0).to_string()
+            } else {
+                format!("({})", js.cx.to_js_ptr_inline(js.arg(0)))
+            };
             let val = if matches!(ty, AdapterType::I64) {
                 js.cx.to_wasm_bigint(&val)
             } else {
@@ -1202,7 +1205,7 @@ fn instruction(
             js.prelude("}");
             js.push(format!(
                 "ptr{i} ? {} : 0",
-                js.coerce_ptr(&format!("ptr{i}")),
+                js.coerce_ptr(&format!("ptr{i}"))
             ));
         }
 
@@ -1533,10 +1536,7 @@ fn instruction(
 
             if *owned {
                 let free = js.cx.export_name_of(*free);
-                let align = js.size_literal(1);
-                js.prelude(&format!(
-                    "if ({ptr}) {{ wasm.{free}({ptr}, {len}, {align}); }}",
-                ));
+                js.prelude(&format!("if ({ptr}) {{ wasm.{free}({ptr}, {len}, 1); }}"));
             }
 
             js.push(format!("v{tmp}"));
@@ -1635,7 +1635,7 @@ fn instruction(
             let i = js.tmp();
             let free = js.cx.export_name_of(*free);
             js.prelude(&format!("var v{i} = {f}({ptr}, {len}).slice();"));
-            let size = js.size_literal(kind.size());
+            let size = kind.size();
             js.prelude(&format!("wasm.{free}({ptr}, {len} * {size}, {size});"));
             js.push(format!("v{i}"))
         }
@@ -1649,7 +1649,7 @@ fn instruction(
             js.prelude(&format!("let v{i};"));
             js.prelude(&format!("if ({ptr}) {{"));
             js.prelude(&format!("v{i} = {f}({ptr}, {len}).slice();"));
-            let size = js.size_literal(kind.size());
+            let size = kind.size();
             js.prelude(&format!("wasm.{free}({ptr}, {len} * {size}, {size});"));
             js.prelude("}");
             js.push(format!("v{i}"));
