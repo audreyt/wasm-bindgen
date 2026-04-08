@@ -1112,7 +1112,7 @@ fn instruction(
             let val = js.pop();
             let mem_string = mem.access(js.cx.config.mode.emscripten());
             let arg0 = if js.cx.memory64 {
-                js.arg(0).to_string()
+                js.cx.to_js_ptr_inline(js.arg(0))
             } else {
                 format!("({})", js.cx.to_js_ptr_inline(js.arg(0)))
             };

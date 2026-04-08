@@ -323,10 +323,10 @@ impl<'a> Context<'a> {
         }
     }
 
-    /// Coerce a pointer-shaped JS expression to the legacy wasm32 unsigned form.
+    /// Inline form of JS pointer normalization for standalone assignments and initializers.
     fn to_js_ptr_inline(&self, expr: &str) -> String {
         if self.memory64 {
-            expr.to_string()
+            format!("Number({expr})")
         } else {
             format!("{expr} >>> 0")
         }
@@ -334,17 +334,13 @@ impl<'a> Context<'a> {
 
     /// Normalizes a Wasm pointer parameter for JS use.
     fn wasm_ptr_fixup_stmt(&self, ptr: &str) -> String {
-        if self.memory64 {
-            String::new()
-        } else {
-            format!("{ptr} = {ptr} >>> 0;")
-        }
+        format!("{ptr} = {};", self.to_js_ptr_inline(ptr))
     }
 
     /// Normalizes a Wasm slice pointer/length pair for JS use.
-    fn wasm_slice_fixup_stmt(&self, ptr: &str, _len: &str) -> String {
+    fn wasm_slice_fixup_stmt(&self, ptr: &str, len: &str) -> String {
         if self.memory64 {
-            String::new()
+            format!("{ptr} = Number({ptr}); {len} = Number({len});")
         } else {
             self.wasm_ptr_fixup_stmt(ptr)
         }
@@ -1616,7 +1612,11 @@ if (require('worker_threads').isMainThread) {{
         }
 
         if class.wrap_needed {
-            let ptr_prelude = self.wasm_ptr_fixup_stmt("ptr");
+            let ptr_prelude = if self.memory64 {
+                String::new()
+            } else {
+                self.wasm_ptr_fixup_stmt("ptr")
+            };
             let (ptr_assignment, register_data) = if self.config.generate_reset_state {
                 (
                     "\
